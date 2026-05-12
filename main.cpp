@@ -49,12 +49,6 @@ int main()
     ball.setPosition({395.f, 650.f});
 
     float ballVx = 0.f, ballVy = 0.f;
-
-// Gentle curve system
-float curveAmount = 0.f;
-float curveTargetY = 0.f;
-bool curveActive = false;
-
     bool ballInPlay = false;
     bool ballOwner = true;
     bool serving = true;
@@ -108,85 +102,46 @@ bool curveActive = false;
     p2SwingCircle.setFillColor(sf::Color(0, 200, 255, 120));
     p2SwingCircle.setOrigin({35.f, 35.f});
 
-       // Hit helpers — with soft edge correction system
-    // When near edges, gracefully guides the ball instead of reversing direction
-   auto hitToP2Field = [&](float dirX, bool dashing)
-{
-    float power = dashing ? 560.f : 420.f;
-    auto ballPos = ball.getPosition();
+    // Hit helpers — with off-court recovery guidance
+    auto hitToP2Field = [&](float dirX, bool dashing) {
+        float power = dashing ? 560.f : 420.f;
+        auto ballPos = ball.getPosition();
+        const float courtCenterX = 300.f;
 
-    const float courtLeft = 120.f;
-    const float courtRight = 480.f;
+        // If outside court, force ball back to center regardless of input
+        if (ballPos.x < 100.f || ballPos.x > 500.f)
+        {
+            float toCenterDir = (ballPos.x < courtCenterX) ? 1.f : -1.f;
+            ballVx = toCenterDir * 110.f; // strong push toward center
+        }
+        else
+        {
+            ballVx = dirX * 80.f; // normal swing direction inside court
+        }
 
-    float timeToReach = 300.f / power;
+        ballVy = -power;
+        ballInPlay = true;
+    };
 
-    // Very small initial drift
-    float targetX = ballPos.x + dirX * 35.f;
+    auto hitToP1Field = [&](float dirX, bool dashing) {
+        float power = dashing ? 560.f : 420.f;
+        auto ballPos = ball.getPosition();
+        const float courtCenterX = 300.f;
 
-    // Soft edge correction
-    if (targetX < courtLeft + 20.f)
-        targetX = courtLeft + 20.f;
+        // If outside court, force ball back to center regardless of input
+        if (ballPos.x < 100.f || ballPos.x > 500.f)
+        {
+            float toCenterDir = (ballPos.x < courtCenterX) ? 1.f : -1.f;
+            ballVx = toCenterDir * 110.f; // strong push toward center
+        }
+        else
+        {
+            ballVx = dirX * 80.f; // normal swing direction inside court
+        }
 
-    if (targetX > courtRight - 20.f)
-        targetX = courtRight - 20.f;
-
-    ballVx = (targetX - ballPos.x) / timeToReach;
-
-    ballVy = -power;
-
-    // Very gentle curve setup
-    if (dirX != 0.f)
-    {
-        curveAmount = dirX * 22.f;
-        curveTargetY = 275.f;
-        curveActive = true;
-    }
-    else
-    {
-        curveActive = false;
-    }
-
-    ballInPlay = true;
-};
-
-    auto hitToP1Field = [&](float dirX, bool dashing)
-{
-    float power = dashing ? 560.f : 420.f;
-    auto ballPos = ball.getPosition();
-
-    const float courtLeft = 120.f;
-    const float courtRight = 480.f;
-
-    float timeToReach = 300.f / power;
-
-    // Very small initial drift
-    float targetX = ballPos.x + dirX * 35.f;
-
-    // Soft edge correction
-    if (targetX < courtLeft + 20.f)
-        targetX = courtLeft + 20.f;
-
-    if (targetX > courtRight - 20.f)
-        targetX = courtRight - 20.f;
-
-    ballVx = (targetX - ballPos.x) / timeToReach;
-
-    ballVy = power;
-
-    // Very gentle curve setup
-    if (dirX != 0.f)
-    {
-        curveAmount = dirX * 22.f;
-        curveTargetY = 525.f;
-        curveActive = true;
-    }
-    else
-    {
-        curveActive = false;
-    }
-
-    ballInPlay = true;
-};
+        ballVy = power;
+        ballInPlay = true;
+    };
 
     sf::Text p1PosText(font, "P1 (0, 0)", 16);
     p1PosText.setFillColor(sf::Color::Yellow);
@@ -382,32 +337,6 @@ bool curveActive = false;
             float nextY = bpos.y + ballVy * dt;
             ball.setPosition({nextX, nextY});
             bpos = ball.getPosition();
-
-            // Gentle curve change
-if (curveActive)
-{
-    // P1 upward shot
-    if (ballVy < 0.f && bpos.y <= curveTargetY)
-    {
-        ballVx += curveAmount;
-
-        // Small slowdown after curve
-        ballVy *= 0.96f;
-
-        curveActive = false;
-    }
-
-    // P2 downward shot
-    else if (ballVy > 0.f && bpos.y >= curveTargetY)
-    {
-        ballVx += curveAmount;
-
-        // Small slowdown after curve
-        ballVy *= 0.96f;
-
-        curveActive = false;
-    }
-}
 
             // Only score at dead zones (very top or very bottom)
             if (bpos.y < deadZoneTop)
