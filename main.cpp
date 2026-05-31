@@ -64,12 +64,13 @@ int main()
     const float netY            = 375.f;
     const float courtTopEdge    = 90.f;
     const float courtBottomEdge = 665.f;
-    const float courtLeftEdge   = courtLeft;
-    const float courtRightEdge  = courtRight;
     const float fieldLeft       = courtLeft  - 100.f;
     const float fieldRight      = courtRight + 100.f;
     const float deadZoneTop     = courtTopEdge    - 20.f;
     const float deadZoneBottom  = courtBottomEdge + 20.f;
+
+    const float outsideLeft  = 493.f;
+    const float outsideRight = 883.f;
 
     // Invisible collision shapes
     sf::RectangleShape court({courtRight - courtLeft, courtBottomEdge - courtTopEdge});
@@ -85,9 +86,59 @@ int main()
     midLine.setFillColor(sf::Color::Transparent);
     midLine.setPosition({courtCenter - 1.5f, courtTopEdge});
 
-    // PLAYERS
+    // ── P1 SPRITE TEXTURES ────────────────────────────────────────────────────
+    sf::Texture p1TexNormal, p1TexIdle,
+                p1TexSwing1, p1TexSwing2,
+                p1TexStep1,  p1TexStep2;
+
+    if (!p1TexNormal.loadFromFile("P1.png"))        return 1;
+    if (!p1TexIdle.loadFromFile("P1idle.png"))      return 1;
+    if (!p1TexSwing1.loadFromFile("player1swing1.png")) return 1;
+    if (!p1TexSwing2.loadFromFile("player1swing2.png")) return 1;
+    if (!p1TexStep1.loadFromFile("p1step1.png"))    return 1;
+    if (!p1TexStep2.loadFromFile("p1step2.png"))    return 1;
+
+    // P1 visual sprite (replaces the red rectangle visually)
+    sf::Sprite p1Sprite(p1TexNormal);
+    p1Sprite.setOrigin(sf::Vector2f(
+        p1TexNormal.getSize().x / 2.f,
+        p1TexNormal.getSize().y / 2.f   // bottom-centre origin to match rect
+    ));
+
+  // P1 forward/back textures
+    sf::Texture p1TexFwd1, p1TexFwd2;
+    if (!p1TexFwd1.loadFromFile("forward1.png")) return 1;
+    if (!p1TexFwd2.loadFromFile("forward2.png")) return 1;
+
+    // P1 animation state
+    enum class P1Anim { Idle, WalkSide, WalkFwd, Swing };
+    P1Anim p1AnimState = P1Anim::Idle;
+
+    // Idle breath
+    float p1IdleTimer    = 0.f;
+    float p1IdleInterval = 0.55f;
+    int   p1IdleFrame    = 0;
+
+    // Side walk cycle — alternates step1/step2 together (both legs alternate)
+    float p1WalkTimer    = 0.f;
+    float p1WalkInterval = 0.18f;
+    int   p1WalkFrame    = 0;   // 0 = step1, 1 = step2
+    bool  p1FacingLeft   = false;
+
+    // Forward/back walk cycle
+    float p1FwdTimer    = 0.f;
+    float p1FwdInterval = 0.18f;
+    int   p1FwdFrame    = 0;    // 0 = forward1, 1 = forward2
+
+    // Swing — ONE full cycle: swing1 then swing2, then done
+    float p1SwingAnimTimer = 0.f;
+    int   p1SwingAnimFrame = 0;
+    bool  p1SwingAnimDone  = true;
+    const float p1SwingFrameDur = 0.10f;
+
+    // PLAYERS (rectangle kept as hitbox, invisible)
     sf::RectangleShape p1({30.f, 40.f});
-    p1.setFillColor(sf::Color::Red);
+    p1.setFillColor(sf::Color::Transparent);
     p1.setOrigin({15.f, 20.f});
     p1.setPosition({courtLeft + 295.f, courtBottomEdge});
 
@@ -96,7 +147,7 @@ int main()
     p2.setOrigin({15.f, 20.f});
     p2.setPosition({courtLeft + 100.f, courtTopEdge});
 
-    // BALL logical circle (position tracker only, not drawn)
+    // BALL
     sf::CircleShape ball(10.f);
     ball.setFillColor(sf::Color::Transparent);
     ball.setOrigin({10.f, 10.f});
@@ -112,33 +163,25 @@ int main()
 
     sf::CircleShape ballShadow(14.f);
     ballShadow.setFillColor(sf::Color(0, 0, 0, 160));
-    ballShadow.setOrigin({14.f, 7.f});   // flat oval
+    ballShadow.setOrigin({14.f, 7.f});
 
-    // ── Ball state ────────────────────────────────────────────────────────────
+    // Ball state
     float ballVx = 0.f;
     float ballVy = 0.f;
-
-    // Z axis = height above court surface (fake 3D perspective)
     float ballZ  = 0.f;
     float ballVz = 0.f;
-    const float ballGravityZ  = 600.f;
-    // Dampen each bounce so the ball settles naturally
-    const float bounceDampen  = 0.52f;   // fraction of Vz kept after each ground hit
-    // How many ground bounces have happened this rally (limits endless bouncing)
-    int   groundBounceCount   = 0;
+    const float ballGravityZ = 600.f;
+    const float bounceDampen = 0.52f;
+    int   groundBounceCount  = 0;
 
-    // Flat (Z-axis) rotation for directional/dash swings
-    float ballSpin     = 0.f;
-    float ballRotation = 0.f;   // accumulated degrees, applied directly each frame
-
-    // Vertical spin (wheel roll) for straight normal swings
-    float vertSpinAngle = 0.f;   // accumulated degrees
-    float vertSpinSpeed = 0.f;   // degrees/sec  — nonzero = vertical spin active
+    float ballSpin      = 0.f;
+    float ballRotation  = 0.f;
+    float vertSpinAngle = 0.f;
+    float vertSpinSpeed = 0.f;
 
     float curveBouncePhase  = 0.f;
     bool  curveBounceActive = false;
 
-    // CURVE SYSTEM
     float curveForce   = 0.f;
     float curveTargetY = 0.f;
     bool  curveActive  = false;
@@ -149,23 +192,19 @@ int main()
     bool ballOwner  = true;
     bool serving    = true;
 
-    // SPEEDS
     const float playerSpeed = 250.f;
     const float dashSpeed   = 700.f;
     const float dashTime    = 0.15f;
 
-    // DASH
     bool  p1Dashing = false, p2Dashing = false;
     float p1DashTimer = 0.f, p2DashTimer = 0.f;
     float p1DashDirX  = 0.f, p1DashDirY  = 0.f;
     float p2DashDirX  = 0.f, p2DashDirY  = 0.f;
 
-    // SWING
     bool  p1Swinging = false, p2Swinging = false;
     float p1SwingTimer = 0.f, p2SwingTimer = 0.f;
     const float swingDuration = 0.25f;
 
-    // HIT COOLDOWN
     float p1HitCooldown = 0.f, p2HitCooldown = 0.f;
     const float hitCooldown = 0.3f;
 
@@ -206,12 +245,17 @@ int main()
     // ── Helpers ───────────────────────────────────────────────────────────────
     auto aimIntoCourt = [&](float dirX, float fromX) -> float
     {
-        if (fromX < fieldLeft)  return  1.f;
-        if (fromX > fieldRight) return -1.f;
+        if (fromX <= outsideLeft)  return  1.f;
+        if (fromX >= outsideRight) return -1.f;
         return dirX;
     };
 
-    // Reset all spin state cleanly
+    auto isNearCourtSideEdge = [&](float x) -> bool
+    {
+        const float edgeThreshold = 50.f;
+        return x <= courtLeft + edgeThreshold || x >= courtRight - edgeThreshold;
+    };
+
     auto resetSpin = [&]()
     {
         ballSpin      = 0.f;
@@ -221,23 +265,24 @@ int main()
         ballSprite.setRotation(sf::degrees(0.f));
     };
 
-    // HIT TO P2 FIELD (P1 hits upward)
     auto hitToP2Field = [&](float dirX, bool dashing)
     {
         dirX = aimIntoCourt(dirX, ball.getPosition().x);
-        float power = 420.f;
         float initialSide = 0.f;
-        bool edgeHit = false;
+        bool  edgeHit     = false;
+        float bx = ball.getPosition().x;
 
-        if (ball.getPosition().x < courtLeft)
+        if (bx <= outsideLeft)
             initialSide = 120.f;
-        else if (ball.getPosition().x > courtRight)
+        else if (bx >= outsideRight)
             initialSide = -120.f;
+        else if (isNearCourtSideEdge(bx) && dirX != 0.f)
+        { initialSide = dirX * 45.f; edgeHit = true; }
         else
             initialSide = dirX * 45.f;
 
         ballVx = initialSide;
-        ballVy = -power;
+        ballVy = -420.f;
         ballZ  = 22.f;
         ballVz = 240.f;
         groundBounceCount = 0;
@@ -245,70 +290,44 @@ int main()
         curveBouncePhase  = 0.f;
 
         if (dashing)
-        {
-            // Dash — strong flat sideways spin
-            vertSpinSpeed = 0.f;
-            vertSpinAngle = 0.f;
-            ballSpin      = dirX * 900.f;
-        }
+        { vertSpinSpeed = 0.f; vertSpinAngle = 0.f; ballSpin = dirX * 900.f; }
         else
         {
             float p1Move = 0.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) p1Move = -1.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) p1Move =  1.f;
-
             if (dirX != 0.f)
-            {
-                // Directional — flat sideways spin
-                vertSpinSpeed = 0.f;
-                vertSpinAngle = 0.f;
-                ballSpin      = dirX * 300.f + p1Move * 160.f;
-            }
+            { vertSpinSpeed = 0.f; vertSpinAngle = 0.f; ballSpin = dirX * 300.f + p1Move * 160.f; }
             else
-            {
-                // Straight normal swing — vertical (wheel) spin
-                ballSpin      = 0.f;
-                vertSpinAngle = 0.f;
-                vertSpinSpeed = -720.f;   // counter-clockwise, ball going up
-            }
+            { ballSpin = 0.f; vertSpinAngle = 0.f; vertSpinSpeed = -720.f; }
         }
 
         curveTargetY = courtTopEdge + 175.f;
         curveForce   = (dirX != 0.f) ? dirX * (dashing ? 220.f : 125.f) : 0.f;
         curvePending = edgeHit;
-
-        bool outsideField = ball.getPosition().x < courtLeft ||
-                            ball.getPosition().x > courtRight;
-        if (outsideField)
-        {
-            curveForce   = 0.f;
-            curvePending = false;
-            curveActive  = false;
-        }
-        else
-            curveActive = !curvePending && (dirX != 0.f);
-
-        curvePassed = false;
-        ballInPlay  = true;
+        curveActive  = !curvePending && (dirX != 0.f);
+        curvePassed  = false;
+        ballInPlay   = true;
     };
 
-    // HIT TO P1 FIELD (P2 hits downward)
     auto hitToP1Field = [&](float dirX, bool dashing)
     {
         dirX = aimIntoCourt(dirX, ball.getPosition().x);
-        float power = 420.f;
         float initialSide = 0.f;
-        bool edgeHit = false;
+        bool  edgeHit     = false;
+        float bx = ball.getPosition().x;
 
-        if (ball.getPosition().x < courtLeft)
+        if (bx <= outsideLeft)
             initialSide = 120.f;
-        else if (ball.getPosition().x > courtRight)
+        else if (bx >= outsideRight)
             initialSide = -120.f;
+        else if (isNearCourtSideEdge(bx) && dirX != 0.f)
+        { initialSide = dirX * 45.f; edgeHit = true; }
         else
             initialSide = dirX * 45.f;
 
         ballVx = initialSide;
-        ballVy = power;
+        ballVy = 420.f;
         ballZ  = 22.f;
         ballVz = 240.f;
         groundBounceCount = 0;
@@ -316,48 +335,24 @@ int main()
         curveBouncePhase  = 0.f;
 
         if (dashing)
-        {
-            vertSpinSpeed = 0.f;
-            vertSpinAngle = 0.f;
-            ballSpin      = dirX * 900.f;
-        }
+        { vertSpinSpeed = 0.f; vertSpinAngle = 0.f; ballSpin = dirX * 900.f; }
         else
         {
             float p2Move = 0.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))  p2Move = -1.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) p2Move =  1.f;
-
             if (dirX != 0.f)
-            {
-                vertSpinSpeed = 0.f;
-                vertSpinAngle = 0.f;
-                ballSpin      = dirX * 300.f + p2Move * 160.f;
-            }
+            { vertSpinSpeed = 0.f; vertSpinAngle = 0.f; ballSpin = dirX * 300.f + p2Move * 160.f; }
             else
-            {
-                ballSpin      = 0.f;
-                vertSpinAngle = 0.f;
-                vertSpinSpeed = 720.f;   // clockwise, ball going down
-            }
+            { ballSpin = 0.f; vertSpinAngle = 0.f; vertSpinSpeed = 720.f; }
         }
 
         curveTargetY = courtTopEdge + 425.f;
         curveForce   = (dirX != 0.f) ? dirX * (dashing ? 220.f : 125.f) : 0.f;
         curvePending = edgeHit;
-
-        bool outsideField = ball.getPosition().x < courtLeft ||
-                            ball.getPosition().x > courtRight;
-        if (outsideField)
-        {
-            curveForce   = 0.f;
-            curvePending = false;
-            curveActive  = false;
-        }
-        else
-            curveActive = !curvePending && (dirX != 0.f);
-
-        curvePassed = false;
-        ballInPlay  = true;
+        curveActive  = !curvePending && (dirX != 0.f);
+        curvePassed  = false;
+        ballInPlay   = true;
     };
 
     sf::Clock clock;
@@ -365,7 +360,7 @@ int main()
     while (window.isOpen())
     {
         float dt = clock.restart().asSeconds();
-        dt = min(dt, 0.033f);   // cap delta
+        dt = min(dt, 0.033f);
 
         if (p1HitCooldown > 0.f) p1HitCooldown -= dt;
         if (p2HitCooldown > 0.f) p2HitCooldown -= dt;
@@ -377,65 +372,36 @@ int main()
 
             if (const auto* key = event->getIf<sf::Event::KeyPressed>())
             {
-                // P1 SERVE
-                if (key->code == sf::Keyboard::Key::X &&
-                    !ballInPlay && ballOwner)
+                if (key->code == sf::Keyboard::Key::X && !ballInPlay && ballOwner)
                 {
                     float dirX = 0.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) dirX = -1.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) dirX =  1.f;
-
-                    ballVx            = 0.f;
-                    ballVy            = -420.f;
-                    ballZ             = 22.f;
-                    ballVz            = 240.f;
-                    groundBounceCount = 0;
-                    curveBounceActive = false;
-                    curveBouncePhase  = 0.f;
-                    ballSpin          = (dirX != 0.f) ? dirX * 260.f : 0.f;
-                    vertSpinSpeed     = 0.f;
-                    vertSpinAngle     = 0.f;
-                    curveActive       = false;
-                    curvePassed       = false;
-                    curvePending      = false;
-                    ballInPlay        = true;
-                    serving           = false;
-                    serveText.setString("");
+                    ballVx = 0.f; ballVy = -420.f; ballZ = 22.f; ballVz = 240.f;
+                    groundBounceCount = 0; curveBounceActive = false; curveBouncePhase = 0.f;
+                    ballSpin = (dirX != 0.f) ? dirX * 260.f : 0.f;
+                    vertSpinSpeed = 0.f; vertSpinAngle = 0.f;
+                    curveActive = false; curvePassed = false; curvePending = false;
+                    ballInPlay = true; serving = false; serveText.setString("");
                 }
 
-                // P2 SERVE
-                if (key->code == sf::Keyboard::Key::Period &&
-                    !ballInPlay && !ballOwner)
+                if (key->code == sf::Keyboard::Key::Period && !ballInPlay && !ballOwner)
                 {
                     float dirX = 0.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))  dirX = -1.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) dirX =  1.f;
-
-                    ballVx            = 0.f;
-                    ballVy            = 420.f;
-                    ballZ             = 22.f;
-                    ballVz            = 240.f;
-                    groundBounceCount = 0;
-                    curveBounceActive = false;
-                    curveBouncePhase  = 0.f;
-                    ballSpin          = (dirX != 0.f) ? dirX * 260.f : 0.f;
-                    vertSpinSpeed     = 0.f;
-                    vertSpinAngle     = 0.f;
-                    curveActive       = false;
-                    curvePassed       = false;
-                    curvePending      = false;
-                    ballInPlay        = true;
-                    serving           = false;
-                    serveText.setString("");
+                    ballVx = 0.f; ballVy = 420.f; ballZ = 22.f; ballVz = 240.f;
+                    groundBounceCount = 0; curveBounceActive = false; curveBouncePhase = 0.f;
+                    ballSpin = (dirX != 0.f) ? dirX * 260.f : 0.f;
+                    vertSpinSpeed = 0.f; vertSpinAngle = 0.f;
+                    curveActive = false; curvePassed = false; curvePending = false;
+                    ballInPlay = true; serving = false; serveText.setString("");
                 }
 
-                // P1 DASH
-                if (key->code == sf::Keyboard::Key::Q &&
-                    !p1Dashing && ballInPlay)
+                if (key->code == sf::Keyboard::Key::Q && !p1Dashing && ballInPlay)
                 {
-                    p1Dashing   = true;
-                    p1DashTimer = dashTime;
-                    p1DashDirX  = 0.f; p1DashDirY = 0.f;
+                    p1Dashing = true; p1DashTimer = dashTime;
+                    p1DashDirX = 0.f; p1DashDirY = 0.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) p1DashDirX = -1.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) p1DashDirX =  1.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W)) p1DashDirY = -1.f;
@@ -443,13 +409,10 @@ int main()
                     if (p1DashDirX == 0.f && p1DashDirY == 0.f) p1DashDirY = -1.f;
                 }
 
-                // P2 DASH
-                if (key->code == sf::Keyboard::Key::RShift &&
-                    !p2Dashing && ballInPlay)
+                if (key->code == sf::Keyboard::Key::RShift && !p2Dashing && ballInPlay)
                 {
-                    p2Dashing   = true;
-                    p2DashTimer = dashTime;
-                    p2DashDirX  = 0.f; p2DashDirY = 0.f;
+                    p2Dashing = true; p2DashTimer = dashTime;
+                    p2DashDirX = 0.f; p2DashDirY = 0.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))  p2DashDirX = -1.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) p2DashDirX =  1.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))    p2DashDirY = -1.f;
@@ -458,23 +421,33 @@ int main()
                 }
 
                 if (key->code == sf::Keyboard::Key::Z && !p1Swinging)
-                { p1Swinging = true; p1SwingTimer = swingDuration; }
+                {
+                    p1Swinging       = true;
+                    p1SwingTimer     = swingDuration;
+                    p1SwingAnimFrame = 0;
+                    p1SwingAnimTimer = 0.f;
+                    p1SwingAnimDone  = false;  // start fresh single cycle
+                    p1AnimState      = P1Anim::Swing;
+                }
 
                 if (key->code == sf::Keyboard::Key::Slash && !p2Swinging)
                 { p2Swinging = true; p2SwingTimer = swingDuration; }
             }
         }
 
-        // P1 MOVEMENT
+        // ── P1 MOVEMENT ───────────────────────────────────────────────────────
+        bool p1Moving = false;
+        float p1MoveX = 0.f;
+
         if (!p1Dashing)
         {
             float vx = 0.f, vy = 0.f;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) vx = -playerSpeed;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) vx =  playerSpeed;
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) { vx = -playerSpeed; p1MoveX = -1.f; p1Moving = true; }
+            if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) { vx =  playerSpeed; p1MoveX =  1.f; p1Moving = true; }
             if (!ballOwner || ballInPlay)
             {
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W)) vy = -playerSpeed;
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) vy =  playerSpeed;
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W)) { vy = -playerSpeed; p1Moving = true; }
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S)) { vy =  playerSpeed; p1Moving = true; }
             }
             p1.move({vx * dt, vy * dt});
         }
@@ -483,6 +456,8 @@ int main()
             p1DashTimer -= dt;
             p1.move({p1DashDirX * dashSpeed * dt, p1DashDirY * dashSpeed * dt});
             if (p1DashTimer <= 0.f) p1Dashing = false;
+            p1Moving = true;
+            p1MoveX  = p1DashDirX;
         }
 
         // P2 MOVEMENT
@@ -532,8 +507,125 @@ int main()
         }
         p2.setPosition(pos2);
 
-        if (p1Swinging) { p1SwingTimer -= dt; if (p1SwingTimer <= 0.f) p1Swinging = false; }
+        if (p1Swinging) { p1SwingTimer -= dt; if (p1SwingTimer <= 0.f) { p1Swinging = false; } }
         if (p2Swinging) { p2SwingTimer -= dt; if (p2SwingTimer <= 0.f) p2Swinging = false; }
+
+      // ── P1 ANIMATION UPDATE ───────────────────────────────────────────────
+        // Detect movement directions
+        bool p1MovingLeft  = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A);
+        bool p1MovingRight = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D);
+        bool p1MovingUp    = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W);
+        bool p1MovingDown  = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S);
+        bool p1MovingSide  = p1MovingLeft || p1MovingRight;
+        bool p1MovingFwd   = p1MovingUp   || p1MovingDown;
+
+        if (p1Dashing)
+        {
+            p1MovingSide = (p1DashDirX != 0.f);
+            p1MovingFwd  = (p1DashDirY != 0.f);
+            if (p1DashDirX < 0.f) p1FacingLeft = true;
+            if (p1DashDirX > 0.f) p1FacingLeft = false;
+        }
+        else
+        {
+            if (p1MovingLeft)  p1FacingLeft = true;
+            if (p1MovingRight) p1FacingLeft = false;
+        }
+
+        // SWING — plays once: swing1 → swing2 → done
+        if (p1AnimState == P1Anim::Swing)
+        {
+            if (!p1SwingAnimDone)
+            {
+                p1SwingAnimTimer += dt;
+                if (p1SwingAnimTimer >= p1SwingFrameDur)
+                {
+                    p1SwingAnimTimer -= p1SwingFrameDur;
+                    p1SwingAnimFrame++;
+                    if (p1SwingAnimFrame >= 2)
+                    {
+                        p1SwingAnimDone = true;
+                        p1SwingAnimFrame = 1; // hold last frame briefly
+                        // Transition back
+                        if (p1MovingSide)       p1AnimState = P1Anim::WalkSide;
+                        else if (p1MovingFwd)   p1AnimState = P1Anim::WalkFwd;
+                        else                    p1AnimState = P1Anim::Idle;
+                    }
+                }
+            }
+        }
+        else if (p1MovingSide)
+        {
+            p1AnimState = P1Anim::WalkSide;
+            p1FwdTimer  = 0.f;
+
+            p1WalkTimer += dt;
+            if (p1WalkTimer >= p1WalkInterval)
+            {
+                p1WalkTimer -= p1WalkInterval;
+                p1WalkFrame  = 1 - p1WalkFrame; // alternate step1 <-> step2
+            }
+        }
+        else if (p1MovingFwd)
+        {
+            p1AnimState = P1Anim::WalkFwd;
+            p1WalkTimer = 0.f;
+
+            p1FwdTimer += dt;
+            if (p1FwdTimer >= p1FwdInterval)
+            {
+                p1FwdTimer -= p1FwdInterval;
+                p1FwdFrame  = 1 - p1FwdFrame; // alternate forward1 <-> forward2
+            }
+        }
+        else
+        {
+            p1AnimState = P1Anim::Idle;
+            p1WalkTimer = 0.f;
+            p1FwdTimer  = 0.f;
+
+            p1IdleTimer += dt;
+            if (p1IdleTimer >= p1IdleInterval)
+            {
+                p1IdleTimer -= p1IdleInterval;
+                p1IdleFrame  = 1 - p1IdleFrame;
+            }
+        }
+
+        // Apply texture
+        switch (p1AnimState)
+        {
+        case P1Anim::Swing:
+            p1Sprite.setTexture(p1SwingAnimFrame == 0 ? p1TexSwing1 : p1TexSwing2);
+            break;
+        case P1Anim::WalkSide:
+            p1Sprite.setTexture(p1WalkFrame == 0 ? p1TexStep1 : p1TexStep2);
+            break;
+        case P1Anim::WalkFwd:
+            p1Sprite.setTexture(p1FwdFrame == 0 ? p1TexFwd1 : p1TexFwd2);
+            break;
+        case P1Anim::Idle:
+        default:
+            p1Sprite.setTexture(p1IdleFrame == 0 ? p1TexNormal : p1TexIdle);
+            break;
+        }
+
+        // Flip horizontally when facing left (side walk only)
+        {
+            auto texSize = p1Sprite.getTexture().getSize();
+            float tw = static_cast<float>(texSize.x);
+            float th = static_cast<float>(texSize.y);
+            p1Sprite.setOrigin({tw / 2.f, th / 2.f});
+
+            // Only flip for side movement — forward/idle/swing face forward
+            if (p1AnimState == P1Anim::WalkSide && p1FacingLeft)
+                p1Sprite.setScale({-1.f, 1.f});
+            else
+                p1Sprite.setScale({ 1.f, 1.f});
+        }
+
+        // Position sprite at same centre as the hitbox rectangle
+        p1Sprite.setPosition(p1.getPosition());
 
         // BALL FOLLOW SERVER
         if (!ballInPlay)
@@ -553,7 +645,6 @@ int main()
         {
             auto bpos = ball.getPosition();
 
-            // CURVE SYSTEM
             if (curvePending)
             {
                 bool reached = (ballVy < 0.f && bpos.y <= curveTargetY) ||
@@ -591,21 +682,14 @@ int main()
                 }
             }
 
-            // Edge slowdown / hard wall
-            if (bpos.x < fieldLeft  + 15.f && ballVx < 0.f) ballVx += 80.f * dt;
-            if (bpos.x > fieldRight - 15.f && ballVx > 0.f) ballVx -= 80.f * dt;
-            if (bpos.x <= fieldLeft)
-            {
-                ball.setPosition({fieldLeft + 1.f, bpos.y});
-                ballVx = abs(ballVx) * 0.5f;
-            }
-            if (bpos.x >= fieldRight)
-            {
-                ball.setPosition({fieldRight - 1.f, bpos.y});
-                ballVx = -abs(ballVx) * 0.5f;
-            }
+            if (bpos.x <= outsideLeft  && ballVx < 0.f) ballVx += 80.f * dt;
+            if (bpos.x >= outsideRight && ballVx > 0.f) ballVx -= 80.f * dt;
 
-            // ── Z HEIGHT (fake 3D bounce) ─────────────────────────────────────
+            if (bpos.x <= fieldLeft)
+            { ball.setPosition({fieldLeft + 1.f, bpos.y}); ballVx = abs(ballVx) * 0.5f; }
+            if (bpos.x >= fieldRight)
+            { ball.setPosition({fieldRight - 1.f, bpos.y}); ballVx = -abs(ballVx) * 0.5f; }
+
             ballVz -= ballGravityZ * dt;
             ballZ  += ballVz * dt;
 
@@ -613,29 +697,12 @@ int main()
             {
                 ballZ = 0.f;
                 groundBounceCount++;
-
-                // Reflect Z velocity upward with damping — this is what makes
-                // the ball visually rise again after hitting the ground.
-                // Each successive bounce gets weaker (bounceDampen^count).
                 float dampThisBounce = bounceDampen * (1.f - groundBounceCount * 0.12f);
                 dampThisBounce       = max(dampThisBounce, 0.f);
                 ballVz               = -ballVz * dampThisBounce;
-
-                // When the bounce is too weak to rise meaningfully, stop
-                if (ballVz < 30.f)
-                {
-                    ballVz = 0.f;
-                    ballZ  = 0.f;
-                }
-
-                // On bounce: spin naturally follows the new travel direction
-                // ballRotation keeps accumulating — no reset needed
-                (void)0;
+                if (ballVz < 30.f) { ballVz = 0.f; ballZ = 0.f; }
             }
-            // ─────────────────────────────────────────────────────────────────
 
-            // vertSpinSpeed/Angle still tracked so draw block knows which
-            // spin mode is active, but angle is kept minimal
             if (vertSpinSpeed != 0.f)
             {
                 vertSpinAngle += vertSpinSpeed * dt;
@@ -652,10 +719,7 @@ int main()
             {
                 curveBouncePhase += dt * 8.f;
                 if (curveBouncePhase >= 3.14159265f)
-                {
-                    curveBouncePhase  = 3.14159265f;
-                    curveBounceActive = false;
-                }
+                { curveBouncePhase = 3.14159265f; curveBounceActive = false; }
             }
 
             ballVx = clamp(ballVx, -550.f, 550.f);
@@ -666,12 +730,11 @@ int main()
             ball.setPosition(sf::Vector2f(nextX, nextY));
             bpos = ball.getPosition();
 
-            // SCORING
             if (bpos.y < deadZoneTop)
             {
                 score1++;
                 score1Text.setString("P1: " + to_string(score1));
-                ballInPlay   = false; ballOwner   = false;
+                ballInPlay = false; ballOwner = false;
                 serving = true; curveActive = false; curvePending = false;
                 p2.setPosition({courtLeft + 100.f, courtTopEdge});
                 serveText.setString(". to Serve (P2)");
@@ -681,14 +744,13 @@ int main()
             {
                 score2++;
                 score2Text.setString("P2: " + to_string(score2));
-                ballInPlay   = false; ballOwner   = true;
+                ballInPlay = false; ballOwner = true;
                 serving = true; curveActive = false; curvePending = false;
                 p1.setPosition({courtLeft + 295.f, courtBottomEdge});
                 serveText.setString("X to Serve (P1)");
                 serveText.setPosition({courtLeft + 80.f, courtBottomEdge + 20.f});
             }
 
-            // HITBOXES
             sf::FloatRect ballB = ball.getGlobalBounds();
 
             sf::FloatRect p1Hit = p1.getGlobalBounds();
@@ -708,7 +770,12 @@ int main()
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) dirX = -1.f;
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) dirX =  1.f;
                 hitToP2Field(dirX, p1Dashing);
-                p1Swinging = false; p1HitCooldown = hitCooldown;
+              p1Swinging       = false;
+                p1HitCooldown    = hitCooldown;
+                p1SwingAnimFrame = 0;
+                p1SwingAnimTimer = 0.f;
+                p1SwingAnimDone  = false;
+                p1AnimState      = P1Anim::Swing;
             }
 
             bool p2CanHit = (p2Swinging || p2Dashing) &&
@@ -728,31 +795,25 @@ int main()
         window.clear();
         window.draw(bgCourtSprite);
 
-        if (p1Swinging) { p1SwingCircle.setPosition(p1.getPosition()); window.draw(p1SwingCircle); }
+        // P1 swing circle removed — using sprite animation instead
         if (p2Swinging) { p2SwingCircle.setPosition(p2.getPosition()); window.draw(p2SwingCircle); }
 
-        // Height ratio: 0 = on ground, 1 = peak height
         float heightRatio = clamp(ballZ / 120.f, 0.f, 1.f);
 
-        // ── SHADOW ────────────────────────────────────────────────────────────
-        // Shadow is always drawn at the ball's XY position (ground projection).
-        // It shrinks as ball rises and grows as it falls back — never disappears.
-        // Min scale 0.7 so it's always clearly visible even at peak height.
         float shadowBaseScale = clamp(1.f - heightRatio * 0.30f, 0.70f, 1.f);
         int shadowAlpha = (int)(220.f - heightRatio * 80.f);
         if (shadowAlpha < 80)  shadowAlpha = 80;
         if (shadowAlpha > 220) shadowAlpha = 220;
         ballShadow.setFillColor(sf::Color(0, 0, 0, shadowAlpha));
         ballShadow.setScale(sf::Vector2f(shadowBaseScale, shadowBaseScale * 0.42f));
-        // Shadow stays exactly at ball XY — no vertical offset from ballZ
         ballShadow.setPosition(sf::Vector2f(ball.getPosition().x,
                                             ball.getPosition().y + 8.f));
         window.draw(ballShadow);
 
-        window.draw(p1);
-        window.draw(p2);
+        // Draw P1 sprite instead of rectangle
+        window.draw(p1Sprite);
+        window.draw(p2);   // P2 still uses rectangle
 
-        // ── BALL SPRITE ───────────────────────────────────────────────────────
         float spriteScale = 0.82f + heightRatio * 0.18f;
 
         if (curveBounceActive)
@@ -761,7 +822,6 @@ int main()
             spriteScale *= 1.f + 0.08f * bounceAmount;
         }
 
-        // Subtle ground squish on hard impact only
         float squishX = 1.f, squishY = 1.f;
         if (ballZ < 5.f && ballVz < -60.f && ballInPlay)
         {
@@ -770,33 +830,16 @@ int main()
             squishY = 1.f - t * 0.10f;
         }
 
-        // ── SPIN RENDERING ────────────────────────────────────────────────────
-        // ALL spin types use real Z-axis texture rotation — no scale tricks.
-        // spinRate is derived from actual ball velocity so it always matches
-        // how fast and in which direction the ball is physically travelling.
-        //
-        //   Normal swing (straight):    rotates based on ballVy (forward roll)
-        //   Directional swing (+left/right): rotates based on ballVx (side roll)
-        //   Dash swing:                 fast rotation based on dominant velocity
-        //
-        // ballRotation accumulates every frame and wraps at ±360.
         {
             float spinRate = 0.f;
-
             if (vertSpinSpeed != 0.f || abs(vertSpinAngle) > 0.5f)
             {
-                // Normal straight hit — ball travels along Y axis.
-                // Spin rate proportional to vertical speed (forward roll).
-                // vertSpinSpeed gives the initial kick; after it decays we
-                // fall back to velocity-driven spin so it stays smooth.
-                float velDriven = ballVy * 0.55f;
+                float velDriven  = ballVy * 0.55f;
                 float kickDriven = vertSpinSpeed * 0.18f;
                 spinRate = (abs(vertSpinSpeed) > 2.f) ? kickDriven : velDriven;
             }
             else
             {
-                // Directional or dash hit — spin driven by whichever axis
-                // is dominant (horizontal for side shots, vertical for lobs).
                 float dominantSpin = (abs(ballVx) > abs(ballVy))
                                      ? ballVx * 0.55f
                                      : ballVy * 0.35f;
@@ -808,13 +851,9 @@ int main()
             if (ballRotation < -360.f) ballRotation += 360.f;
 
             ballSprite.setRotation(sf::degrees(ballRotation));
-            ballSprite.setScale(sf::Vector2f(
-                spriteScale * squishX,
-                spriteScale * squishY
-            ));
+            ballSprite.setScale(sf::Vector2f(spriteScale * squishX, spriteScale * squishY));
         }
 
-        // Sprite Y offset by ballZ so it visually rises above its shadow
         ballSprite.setPosition(sf::Vector2f(
             ball.getPosition().x,
             ball.getPosition().y - ballZ * 0.62f
