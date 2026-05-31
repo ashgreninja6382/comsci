@@ -98,11 +98,31 @@ int main()
     if (!p1TexStep1.loadFromFile("p1step1.png"))    return 1;
     if (!p1TexStep2.loadFromFile("p1step2.png"))    return 1;
 
+    // ── P2 SPRITE TEXTURES ────────────────────────────────────────────────────
+    sf::Texture p2TexNormal, p2TexIdle,
+                p2TexSwing1,
+                p2TexStep1,  p2TexStep2,
+                p2TexFwd1,   p2TexFwd2;
+
+    if (!p2TexNormal.loadFromFile("P2.png"))           return 1;
+    if (!p2TexIdle.loadFromFile("P2idle.png"))         return 1;
+    if (!p2TexSwing1.loadFromFile("player2swing1.png")) return 1;
+    if (!p2TexStep1.loadFromFile("p2step1.png"))       return 1;
+    if (!p2TexStep2.loadFromFile("p2step2.png"))       return 1;
+    if (!p2TexFwd1.loadFromFile("p2forward1.png"))     return 1;
+    if (!p2TexFwd2.loadFromFile("p2forward2.png"))     return 1;
+
     // P1 visual sprite (replaces the red rectangle visually)
     sf::Sprite p1Sprite(p1TexNormal);
     p1Sprite.setOrigin(sf::Vector2f(
         p1TexNormal.getSize().x / 2.f,
         p1TexNormal.getSize().y / 2.f
+    ));
+
+    sf::Sprite p2Sprite(p2TexNormal);
+    p2Sprite.setOrigin(sf::Vector2f(
+        p2TexNormal.getSize().x / 2.f,
+        p2TexNormal.getSize().y / 2.f
     ));
 
     // P1 forward/back textures
@@ -136,6 +156,31 @@ int main()
     bool  p1SwingAnimDone  = true;
     const float p1SwingFrameDur = 0.10f;
 
+    // P2 animation state (mirrors P1 — same enum)
+    P1Anim p2AnimState = P1Anim::Idle;
+
+    // Idle
+    float p2IdleTimer    = 0.f;
+    float p2IdleInterval = 0.55f;
+    int   p2IdleFrame    = 0;
+
+    // Side walk — 3-frame cycle: step1 -> normal -> step2
+    float p2WalkTimer    = 0.f;
+    float p2WalkInterval = 0.18f;
+    int   p2WalkFrame    = 0;
+    bool  p2FacingLeft   = false;
+
+    // Forward/back walk
+    float p2FwdTimer    = 0.f;
+    float p2FwdInterval = 0.18f;
+    int   p2FwdFrame    = 0;
+
+    // Swing — P2 only has 1 swing frame, plays once then done
+    float p2SwingAnimTimer = 0.f;
+    int   p2SwingAnimFrame = 0;
+    bool  p2SwingAnimDone  = true;
+    const float p2SwingFrameDur = 0.18f;  // slightly longer hold since only 1 frame
+
     // PLAYERS (rectangle kept as hitbox, invisible)
     sf::RectangleShape p1({30.f, 40.f});
     p1.setFillColor(sf::Color::Transparent);
@@ -143,7 +188,7 @@ int main()
     p1.setPosition({courtLeft + 295.f, courtBottomEdge});
 
     sf::RectangleShape p2({30.f, 40.f});
-    p2.setFillColor(sf::Color(128, 0, 200));
+    p2.setFillColor(sf::Color::Transparent);
     p2.setOrigin({15.f, 20.f});
     p2.setPosition({courtLeft + 100.f, courtTopEdge});
 
@@ -378,6 +423,12 @@ sf::CircleShape ball(6.f);
                     ballSpin = (dirX != 0.f) ? dirX * 260.f : 0.f;
                     vertSpinSpeed = 0.f; vertSpinAngle = 0.f;
                     curveActive = false; curvePassed = false; curvePending = false;
+                    p1Swinging       = true;
+                    p1SwingTimer     = swingDuration;
+                    p1SwingAnimFrame = 0;
+                    p1SwingAnimTimer = 0.f;
+                    p1SwingAnimDone  = false;
+                    p1AnimState      = P1Anim::Swing;
                     ballInPlay = true; serving = false; serveText.setString("");
                 }
 
@@ -391,6 +442,12 @@ sf::CircleShape ball(6.f);
                     ballSpin = (dirX != 0.f) ? dirX * 260.f : 0.f;
                     vertSpinSpeed = 0.f; vertSpinAngle = 0.f;
                     curveActive = false; curvePassed = false; curvePending = false;
+                    p2Swinging       = true;
+                    p2SwingTimer     = swingDuration;
+                    p2SwingAnimFrame = 0;
+                    p2SwingAnimTimer = 0.f;
+                    p2SwingAnimDone  = false;
+                    p2AnimState      = P1Anim::Swing;
                     ballInPlay = true; serving = false; serveText.setString("");
                 }
 
@@ -427,7 +484,14 @@ sf::CircleShape ball(6.f);
                 }
 
                 if (key->code == sf::Keyboard::Key::Slash && !p2Swinging)
-                { p2Swinging = true; p2SwingTimer = swingDuration; }
+                {
+                    p2Swinging       = true;
+                    p2SwingTimer     = swingDuration;
+                    p2SwingAnimFrame = 0;
+                    p2SwingAnimTimer = 0.f;
+                    p2SwingAnimDone  = false;
+                    p2AnimState      = P1Anim::Swing;
+                }
             }
         }
 
@@ -481,26 +545,24 @@ sf::CircleShape ball(6.f);
         if (!ballInPlay && ballOwner)
         {
             pos1.x = clamp(pos1.x, courtCenter, courtRight);
-            pos1.y = clamp(pos1.y, courtTopEdge + 360.f, courtBottomEdge);
         }
         else
         {
             pos1.x = clamp(pos1.x, fieldLeft, fieldRight);
-            pos1.y = clamp(pos1.y, netY + 20.f, deadZoneBottom - 20.f);
         }
+        pos1.y = clamp(pos1.y, 496.f, courtBottomEdge);
         p1.setPosition(pos1);
 
         auto pos2 = p2.getPosition();
         if (!ballInPlay && !ballOwner)
         {
             pos2.x = clamp(pos2.x, courtLeft, courtCenter);
-            pos2.y = clamp(pos2.y, courtTopEdge, courtTopEdge + 230.f);
         }
         else
         {
             pos2.x = clamp(pos2.x, fieldLeft, fieldRight);
-            pos2.y = clamp(pos2.y, deadZoneTop + 20.f, netY - 20.f);
         }
+        pos2.y = clamp(pos2.y, courtTopEdge, 224.f);
         p2.setPosition(pos2);
 
         if (p1Swinging) { p1SwingTimer -= dt; if (p1SwingTimer <= 0.f) { p1Swinging = false; } }
@@ -629,6 +691,120 @@ float baseScale = min(targetW / tw, targetH / th);
 
         // Position sprite at same centre as the hitbox rectangle
         p1Sprite.setPosition(p1.getPosition());
+
+        // ── P2 ANIMATION UPDATE ───────────────────────────────────────────────
+        bool p2MovingLeft  = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left);
+        bool p2MovingRight = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right);
+        bool p2MovingUp    = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up);
+        bool p2MovingDown  = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down);
+        bool p2MovingSide  = p2MovingLeft || p2MovingRight;
+        bool p2MovingFwd   = p2MovingUp   || p2MovingDown;
+
+        if (p2Dashing)
+        {
+            p2MovingSide = (p2DashDirX != 0.f);
+            p2MovingFwd  = (p2DashDirY != 0.f);
+            if (p2DashDirX < 0.f) p2FacingLeft = true;
+            if (p2DashDirX > 0.f) p2FacingLeft = false;
+        }
+        else
+        {
+            if (p2MovingLeft)  p2FacingLeft = true;
+            if (p2MovingRight) p2FacingLeft = false;
+        }
+
+        // SWING — P2 has only 1 frame; hold it for swingFrameDur then done
+        if (p2AnimState == P1Anim::Swing)
+        {
+            if (!p2SwingAnimDone)
+            {
+                p2SwingAnimTimer += dt;
+                if (p2SwingAnimTimer >= p2SwingFrameDur)
+                {
+                    p2SwingAnimDone  = true;
+                    p2SwingAnimFrame = 0;
+                    p2AnimState = p2MovingSide ? P1Anim::WalkSide
+                                : p2MovingFwd  ? P1Anim::WalkFwd
+                                :                P1Anim::Idle;
+                }
+            }
+        }
+        else if (p2MovingSide)
+        {
+            p2AnimState = P1Anim::WalkSide;
+            p2FwdTimer  = 0.f;
+
+            p2WalkTimer += dt;
+            if (p2WalkTimer >= p2WalkInterval)
+            {
+                p2WalkTimer -= p2WalkInterval;
+                p2WalkFrame  = (p2WalkFrame + 1) % 3;
+            }
+        }
+        else if (p2MovingFwd)
+        {
+            p2AnimState = P1Anim::WalkFwd;
+            p2WalkTimer = 0.f;
+
+            p2FwdTimer += dt;
+            if (p2FwdTimer >= p2FwdInterval)
+            {
+                p2FwdTimer -= p2FwdInterval;
+                p2FwdFrame  = 1 - p2FwdFrame;
+            }
+        }
+        else
+        {
+            p2AnimState = P1Anim::Idle;
+            p2WalkTimer = 0.f;
+            p2FwdTimer  = 0.f;
+            p2WalkFrame = 0;
+
+            p2IdleTimer += dt;
+            if (p2IdleTimer >= p2IdleInterval)
+            {
+                p2IdleTimer -= p2IdleInterval;
+                p2IdleFrame  = 1 - p2IdleFrame;
+            }
+        }
+
+        // Apply P2 texture
+        switch (p2AnimState)
+        {
+        case P1Anim::Swing:
+            p2Sprite.setTexture(p2TexSwing1);
+            break;
+        case P1Anim::WalkSide:
+        {
+            int displayFrame = p2FacingLeft ? (2 - p2WalkFrame) : p2WalkFrame;
+            if      (displayFrame == 0) p2Sprite.setTexture(p2TexStep1);
+            else if (displayFrame == 1) p2Sprite.setTexture(p2TexNormal);
+            else                        p2Sprite.setTexture(p2TexStep2);
+            break;
+        }
+        case P1Anim::WalkFwd:
+            p2Sprite.setTexture(p2FwdFrame == 0 ? p2TexFwd1 : p2TexFwd2);
+            break;
+        case P1Anim::Idle:
+        default:
+            p2Sprite.setTexture(p2IdleFrame == 0 ? p2TexNormal : p2TexIdle);
+            break;
+        }
+
+        {
+            auto texSize = p2Sprite.getTexture().getSize();
+            float tw = static_cast<float>(texSize.x);
+            float th = static_cast<float>(texSize.y);
+            p2Sprite.setOrigin({tw / 2.f, th / 2.f});
+
+            const float targetW = 72.f;
+            const float targetH = 96.f;
+            float baseScale = min(targetW / tw, targetH / th);
+            bool mirror = p2FacingLeft;
+            p2Sprite.setScale({ mirror ? -baseScale : baseScale, baseScale });
+        }
+
+        p2Sprite.setPosition(p2.getPosition());
 
         // BALL FOLLOW SERVER
         if (!ballInPlay)
@@ -791,15 +967,16 @@ float baseScale = min(targetW / tw, targetH / th);
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) dirX =  1.f;
                 hitToP1Field(dirX, p2Dashing);
                 p2Swinging = false; p2HitCooldown = hitCooldown;
+                p2SwingAnimFrame = 0;
+                p2SwingAnimTimer = 0.f;
+                p2SwingAnimDone  = false;
+                p2AnimState      = P1Anim::Swing;
             }
         }
 
         // ── DRAW ──────────────────────────────────────────────────────────────
         window.clear();
         window.draw(bgCourtSprite);
-
-        // P1 swing circle removed — using sprite animation instead
-        if (p2Swinging) { p2SwingCircle.setPosition(p2.getPosition()); window.draw(p2SwingCircle); }
 
         float heightRatio = clamp(ballZ / 120.f, 0.f, 1.f);
 
@@ -816,9 +993,9 @@ float baseScale = min(targetW / tw, targetH / th);
             window.draw(ballShadow);
         }
 
-        // Draw P1 sprite instead of rectangle
+        // Draw P1 and P2 sprites instead of rectangles
         window.draw(p1Sprite);
-        window.draw(p2);   // P2 still uses rectangle
+        window.draw(p2Sprite);
 
        float spriteScale = 0.52f + heightRatio * 0.12f;
 
