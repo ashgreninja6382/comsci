@@ -148,9 +148,9 @@ int main()
     p2.setPosition({courtLeft + 100.f, courtTopEdge});
 
     // BALL
-    sf::CircleShape ball(10.f);
+sf::CircleShape ball(6.f);
     ball.setFillColor(sf::Color::Transparent);
-    ball.setOrigin({10.f, 10.f});
+  ball.setOrigin({6.f, 6.f});
     ball.setPosition({courtLeft + 295.f, courtBottomEdge - 35.f});
 
     sf::Texture ballTexture;
@@ -161,9 +161,9 @@ int main()
     ballSprite.setOrigin(sf::Vector2f(ballTexture.getSize().x / 2.f,
                                       ballTexture.getSize().y / 2.f));
 
-    sf::CircleShape ballShadow(14.f);
+    sf::CircleShape ballShadow(9.f);
     ballShadow.setFillColor(sf::Color(0, 0, 0, 160));
-    ballShadow.setOrigin({14.f, 7.f});
+    ballShadow.setOrigin({9.f, 4.5f});
 
     // Ball state
     float ballVx = 0.f;
@@ -612,7 +612,9 @@ int main()
             float th = static_cast<float>(texSize.y);
             p1Sprite.setOrigin({tw / 2.f, th / 2.f});
 
-            float baseScale = min(p1.getSize().x / tw, p1.getSize().y / th);
+           const float targetW = 72.f;
+const float targetH = 96.f;
+float baseScale = min(targetW / tw, targetH / th);
             bool mirrorSide = (p1AnimState == P1Anim::WalkSide && !p1FacingLeft);
             p1Sprite.setScale({ mirrorSide ? -baseScale : baseScale, baseScale });
         }
@@ -810,7 +812,7 @@ int main()
         window.draw(p1Sprite);
         window.draw(p2);   // P2 still uses rectangle
 
-        float spriteScale = 0.82f + heightRatio * 0.18f;
+       float spriteScale = 0.52f + heightRatio * 0.12f;
 
         if (curveBounceActive)
         {
