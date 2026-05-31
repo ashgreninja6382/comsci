@@ -12,78 +12,71 @@ int main()
     if (!backgroundTexture.loadFromFile("background.png"))
         return 1;
 
-    sf::Vector2u bgSize = backgroundTexture.getSize();
-    float bgWidth = static_cast<float>(bgSize.x);
-    float bgHeight = static_cast<float>(bgSize.y);
-
-    // SPLASH SCREEN - show background before game starts
-    sf::RenderWindow splashWindow(sf::VideoMode({static_cast<unsigned>(bgWidth), static_cast<unsigned>(bgHeight)}),
-                                   "Super Pickleball Adventure - Press X to Start");
-    splashWindow.setFramerateLimit(60);
-
     sf::Sprite backgroundSprite(backgroundTexture);
     backgroundSprite.setPosition({0.f, 0.f});
 
-    // Display splash screen until X is pressed
+    sf::Vector2u bgSize = backgroundTexture.getSize();
+    float bgW = static_cast<float>(bgSize.x);
+    float bgH = static_cast<float>(bgSize.y);
+
+    // SPLASH SCREEN
+    sf::RenderWindow splashWindow(sf::VideoMode({bgSize.x, bgSize.y}),
+                                   "Super Pickleball Adventure - Press X to Start");
+    splashWindow.setFramerateLimit(60);
+
     while (splashWindow.isOpen())
     {
         while (const auto event = splashWindow.pollEvent())
         {
             if (event->is<sf::Event::Closed>())
                 splashWindow.close();
-
             if (const auto* key = event->getIf<sf::Event::KeyPressed>())
-            {
                 if (key->code == sf::Keyboard::Key::X)
                     splashWindow.close();
-            }
         }
-
         splashWindow.clear();
         splashWindow.draw(backgroundSprite);
         splashWindow.display();
     }
 
-    // CREATE MAIN GAME WINDOW - sized to match background
-    sf::RenderWindow window(sf::VideoMode({static_cast<unsigned>(bgWidth), static_cast<unsigned>(bgHeight)}),
+    // MAIN GAME WINDOW
+    sf::RenderWindow window(sf::VideoMode({bgSize.x, bgSize.y}),
                             "Super Pickleball Adventure");
     window.setFramerateLimit(60);
 
-    // FIELD - adjust size to background
-    sf::RectangleShape field({bgWidth, bgHeight});
+    // FIELD
+    sf::RectangleShape field({bgW, bgH});
     field.setFillColor(sf::Color(34, 100, 34));
 
-    // CENTER THE COURT
-    float courtWidth = 400.f;
-    float courtHeight = 600.f;
-    float courtX = (bgWidth - courtWidth) / 2.f;
-    float courtY = (bgHeight - courtHeight) / 2.f;
+    // Court centered in window — always 400x600
+    float courtOffsetX = (bgW - 400.f) / 2.f;
+    float courtOffsetY = (bgH - 600.f) / 2.f;
 
     // COURT
-    sf::RectangleShape court({courtWidth, courtHeight});
+    sf::RectangleShape court({400.f, 600.f});
     court.setFillColor(sf::Color(150, 180, 150));
     court.setOutlineColor(sf::Color::White);
     court.setOutlineThickness(3.f);
-    court.setPosition({courtX, courtY});
+    court.setPosition({courtOffsetX, courtOffsetY});
 
-    sf::RectangleShape netLine({courtWidth, 10.f});
+    sf::RectangleShape netLine({400.f, 10.f});
     netLine.setFillColor(sf::Color::White);
-    netLine.setPosition({courtX, courtY + courtHeight / 2.f - 5.f});
+    netLine.setPosition({courtOffsetX, courtOffsetY + 295.f});
 
-    sf::RectangleShape midLine({3.f, courtHeight});
+    sf::RectangleShape midLine({3.f, 600.f});
     midLine.setFillColor(sf::Color::White);
-    midLine.setPosition({courtX + courtWidth / 2.f - 1.5f, courtY});
+    midLine.setPosition({courtOffsetX + 198.5f, courtOffsetY});
 
     // PLAYERS
     sf::RectangleShape p1({30.f, 40.f});
     p1.setFillColor(sf::Color::Red);
     p1.setOrigin({15.f, 20.f});
-    p1.setPosition({courtX + 200.f, courtY + 480.f});
+    p1.setPosition({courtOffsetX + 295.f, courtOffsetY + 580.f});
 
     sf::RectangleShape p2({30.f, 40.f});
     p2.setFillColor(sf::Color(128, 0, 200));
     p2.setOrigin({15.f, 20.f});
-    p2.setPosition({courtX + 200.f, courtY + 120.f});
+    p2.setPosition({courtOffsetX + 100.f, courtOffsetY + 20.f});
 
     // BALL
     sf::CircleShape ball(10.f);
@@ -91,14 +84,15 @@ int main()
     ball.setOutlineColor(sf::Color::Black);
     ball.setOutlineThickness(2.f);
     ball.setOrigin({10.f, 10.f});
-    ball.setPosition({courtX + 200.f, courtY + 450.f});
+    ball.setPosition({courtOffsetX + 295.f, courtOffsetY + 550.f});
 
     sf::Texture ballTexture;
     if (!ballTexture.loadFromFile("ball.png"))
         return 1;
 
     sf::Sprite ballSprite(ballTexture);
-    ballSprite.setOrigin(sf::Vector2f(ballTexture.getSize().x / 2.f, ballTexture.getSize().y / 2.f));
+    ballSprite.setOrigin(sf::Vector2f(ballTexture.getSize().x / 2.f,
+                                      ballTexture.getSize().y / 2.f));
     ballSprite.setPosition(ball.getPosition());
 
     sf::CircleShape ballShadow(12.f);
@@ -119,7 +113,7 @@ int main()
     float curveForce   = 0.f;
     float curveTargetY = 0.f;
     bool  curveActive  = false;
-    bool  curvePassed  = false; // has ball passed the curve trigger point
+    bool  curvePassed  = false;
 
     bool ballInPlay = false;
     bool ballOwner  = true;
@@ -145,23 +139,16 @@ int main()
     float p1HitCooldown = 0.f, p2HitCooldown = 0.f;
     const float hitCooldown = 0.3f;
 
-    // BOUNDARIES - adjusted for centered court
-    const float deadZoneTop    = courtY - 20.f;
-    const float deadZoneBottom = courtY + courtHeight + 20.f;
-    const float fieldLeft      = courtX - 20.f;
-    const float fieldRight     = courtX + courtWidth + 20.f;
-    const float courtLeft      = courtX;
-    const float courtRight     = courtX + courtWidth;
-    const float courtCenter    = courtX + courtWidth / 2.f;
-
-    // Court area calculations
-    const float curveTargetP2  = courtY + courtHeight / 4.f;  // Upper court area
-    const float curveTargetP1  = courtY + 3.f * courtHeight / 4.f;  // Lower court area
-    const float courtLeftEdge  = courtX + 15.f;
-    const float courtRightEdge = courtX + courtWidth - 15.f;
-    const float courtNetY      = courtY + courtHeight / 2.f;
-    const float p1HitZone      = courtY + courtHeight * 0.6f;  // P1 hits below this
-    const float p2HitZone      = courtY + courtHeight * 0.4f;  // P2 hits above this
+    // BOUNDARIES — all relative to centered court
+    const float deadZoneTop    = courtOffsetY - 20.f;
+    const float deadZoneBottom = courtOffsetY + 620.f;
+    const float fieldLeft      = courtOffsetX - 80.f;
+    const float fieldRight     = courtOffsetX + 480.f;
+    const float courtLeft      = courtOffsetX;
+    const float courtRight     = courtOffsetX + 400.f;
+    const float courtCenter    = courtOffsetX + 200.f;
+    const float courtLeftEdge  = courtOffsetX + 15.f;
+    const float courtRightEdge = courtOffsetX + 385.f;
 
     int score1 = 0, score2 = 0;
 
@@ -171,15 +158,15 @@ int main()
 
     sf::Text score1Text(font, "P1: 0", 28);
     score1Text.setFillColor(sf::Color::White);
-    score1Text.setPosition({20.f, 730.f});
+    score1Text.setPosition({courtOffsetX - 80.f, courtOffsetY + 620.f});
 
     sf::Text score2Text(font, "P2: 0", 28);
     score2Text.setFillColor(sf::Color::White);
-    score2Text.setPosition({420.f, 20.f});
+    score2Text.setPosition({courtOffsetX + 320.f, courtOffsetY - 80.f});
 
     sf::Text serveText(font, "X to Serve (P1)", 20);
     serveText.setFillColor(sf::Color::Yellow);
-    serveText.setPosition({180.f, 760.f});
+    serveText.setPosition({courtOffsetX + 80.f, courtOffsetY + 630.f});
 
     sf::CircleShape p1SwingCircle(35.f);
     p1SwingCircle.setFillColor(sf::Color(255, 255, 0, 120));
@@ -191,43 +178,20 @@ int main()
 
     sf::Text p1PosText(font, "P1 (0, 0)", 16);
     p1PosText.setFillColor(sf::Color::Yellow);
-    p1PosText.setPosition({10.f, 710.f});
+    p1PosText.setPosition({courtOffsetX - 80.f, courtOffsetY + 590.f});
 
     sf::Text p2PosText(font, "P2 (0, 0)", 16);
     p2PosText.setFillColor(sf::Color::Cyan);
-    p2PosText.setPosition({10.f, 20.f});
-
-    // Helper: compute safe horizontal velocity toward opponent field
-    // Ensures ball doesn't immediately fly out of bounds on edge shots
-    auto safeVx = [&](float dirX, float fromX) -> float
-    {
-        // Near left edge — stabilize rightward
-        if (fromX < courtLeft + 40.f && dirX <= 0.f)
-            return 30.f; // gentle rightward push
-
-        // Near right edge — stabilize leftward
-        if (fromX > courtRight - 40.f && dirX >= 0.f)
-            return -30.f;
-
-        // Normal shot inside court
-        return dirX * 75.f;
-    };
-
-    auto isInsideCourtX = [&](float x) -> bool
-    {
-        return x >= courtLeft && x <= courtRight;
-    };
+    p2PosText.setPosition({courtOffsetX - 80.f, courtOffsetY - 60.f});
 
     auto aimIntoCourt = [&](float dirX, float fromX) -> float
     {
-        if (fromX < courtLeft)
-            return 1.f;
-        if (fromX > courtRight)
-            return -1.f;
+        if (fromX < courtLeft)  return 1.f;
+        if (fromX > courtRight) return -1.f;
         return dirX;
     };
 
- // HIT TO P2 FIELD (P1 hits upward)
+    // HIT TO P2 FIELD
     auto hitToP2Field = [&](float dirX, bool dashing)
     {
         dirX = aimIntoCourt(dirX, ball.getPosition().x);
@@ -238,14 +202,15 @@ int main()
         else if (ball.getPosition().x > courtRight)
             initialSide = -120.f;
         else
-            initialSide = dirX * 45.f;
+           initialSide = dirX * 45.f;
 
         ballVx = initialSide;
         ballVy = -power;
-        ballZ = 22.f;
-            ballVz = 240.f;
+        ballZ  = 22.f;
+        ballVz = 240.f;
         curveBounceActive = false;
-        curveBouncePhase = 0.f;
+        curveBouncePhase  = 0.f;
+
         if (dashing)
             ballSpin = dirX * 900.f;
         else
@@ -253,23 +218,20 @@ int main()
             float p1Move = 0.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) p1Move = -1.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) p1Move =  1.f;
-            // directional hit contributes primary spin; player lateral movement adds secondary spin
-           if (dirX != 0.f)
-    ballSpin = dirX * 300.f + p1Move * 160.f;
-else
-    ballSpin = -700.f;   // topspin forward (counter-clockwise, ball going up)
+            if (dirX != 0.f)
+                ballSpin = dirX * 300.f + p1Move * 160.f;
+            else
+                ballSpin = -700.f;
         }
 
-        // Curve triggers at y=275 (P2 field area) only when direction pressed
-        curveTargetY = curveTargetP2;
-        curveForce   = (dirX != 0.f) ? dirX * (dashing ? 200.f : 125.f) : 0.f;
+        curveTargetY = courtOffsetY + 175.f;
+        curveForce   = (dirX != 0.f) ? dirX * (dashing ? 220.f : 125.f) : 0.f;
         curveActive  = (dirX != 0.f);
         curvePassed  = false;
-
-        ballInPlay = true;
+        ballInPlay   = true;
     };
 
-    // HIT TO P1 FIELD (P2 hits downward)
+    // HIT TO P1 FIELD
     auto hitToP1Field = [&](float dirX, bool dashing)
     {
         dirX = aimIntoCourt(dirX, ball.getPosition().x);
@@ -280,14 +242,15 @@ else
         else if (ball.getPosition().x > courtRight)
             initialSide = -120.f;
         else
-            initialSide = dirX * 45.f;
+           initialSide = dirX * 45.f;
 
         ballVx = initialSide;
         ballVy = power;
-        ballZ = 22.f;
+        ballZ  = 22.f;
         ballVz = 240.f;
         curveBounceActive = false;
-        curveBouncePhase = 0.f;
+        curveBouncePhase  = 0.f;
+
         if (dashing)
             ballSpin = dirX * 900.f;
         else
@@ -295,19 +258,17 @@ else
             float p2Move = 0.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))  p2Move = -1.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) p2Move =  1.f;
-           if (dirX != 0.f)
-    ballSpin = dirX * 300.f + p2Move * 160.f;
-else
-    ballSpin = 700.f;    // topspin forward (clockwise, ball going down)
+            if (dirX != 0.f)
+                ballSpin = dirX * 300.f + p2Move * 160.f;
+            else
+                ballSpin = 700.f;
         }
 
-        // Curve triggers at y=525 (P1 field area) only when direction pressed
-        curveTargetY = curveTargetP1;
-        curveForce   = (dirX != 0.f) ? dirX * (dashing ? 200.f : 125.f) : 0.f;
+        curveTargetY = courtOffsetY + 425.f;
+        curveForce   = (dirX != 0.f) ? dirX * (dashing ? 220.f : 125.f) : 0.f;
         curveActive  = (dirX != 0.f);
         curvePassed  = false;
-
-        ballInPlay = true;
+        ballInPlay   = true;
     };
 
     sf::Clock clock;
@@ -334,21 +295,17 @@ else
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) dirX = -1.f;
                     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) dirX =  1.f;
 
-                   ballVx = 0.f;
+                    ballVx = 0.f;
                     ballVy = -420.f;
-                    ballZ = 22.f;
+                    ballZ  = 22.f;
                     ballVz = 240.f;
                     curveBounceActive = false;
-                    curveBouncePhase = 0.f;
-                    ballSpin = (dirX != 0.f) ? dirX * 260.f : 0.f;
-                    curveTargetY = curveTargetP2 + 25.f;
-                    curveForce   = dirX * 125.f;
-                    curveActive  = true;
-                    curvePassed  = false;
-
-                    ballInPlay = true;
-                    serving    = false;
+                    curveBouncePhase  = 0.f;
+                    ballSpin    = (dirX != 0.f) ? dirX * 260.f : 0.f;
                     curveActive = false;
+                    curvePassed = false;
+                    ballInPlay  = true;
+                    serving     = false;
                     serveText.setString("");
                 }
 
@@ -362,23 +319,19 @@ else
 
                     ballVx = 0.f;
                     ballVy = 420.f;
-                    ballZ = 22.f;
+                    ballZ  = 22.f;
                     ballVz = 240.f;
                     curveBounceActive = false;
-                    curveBouncePhase = 0.f;
-                    ballSpin = (dirX != 0.f) ? dirX * 260.f : 0.f;
-                    curveTargetY = curveTargetP1 - 25.f;
-                    curveForce   = dirX * 125.f;
-                    curveActive  = true;
-                    curvePassed  = false;
-
-                    ballInPlay = true;
-                    serving    = false;
+                    curveBouncePhase  = 0.f;
+                    ballSpin    = (dirX != 0.f) ? dirX * 260.f : 0.f;
                     curveActive = false;
+                    curvePassed = false;
+                    ballInPlay  = true;
+                    serving     = false;
                     serveText.setString("");
                 }
 
-                // P1 DASH (disabled during serve)
+                // P1 DASH
                 if (key->code == sf::Keyboard::Key::Q &&
                     !p1Dashing && ballInPlay)
                 {
@@ -392,7 +345,7 @@ else
                     if (p1DashDirX == 0.f && p1DashDirY == 0.f) p1DashDirY = -1.f;
                 }
 
-                // P2 DASH (disabled during serve)
+                // P2 DASH
                 if (key->code == sf::Keyboard::Key::RShift &&
                     !p2Dashing && ballInPlay)
                 {
@@ -466,28 +419,26 @@ else
         auto pos1 = p1.getPosition();
         if (!ballInPlay && ballOwner)
         {
-            // P1 serving: locked to lower RIGHT quadrant
-            pos1.x = clamp(pos1.x, courtX + 205.f, courtX + 385.f);
-            pos1.y = clamp(pos1.y, courtY + 360.f, courtY + 585.f);
+            pos1.x = clamp(pos1.x, courtOffsetX + 205.f, courtOffsetX + 385.f);
+            pos1.y = clamp(pos1.y, courtOffsetY + 360.f, courtOffsetY + 585.f);
         }
         else
         {
             pos1.x = clamp(pos1.x, fieldLeft, fieldRight);
-            pos1.y = clamp(pos1.y, courtY + 300.f, deadZoneBottom - 20.f);
+            pos1.y = clamp(pos1.y, courtOffsetY + 300.f, deadZoneBottom - 20.f);
         }
         p1.setPosition(pos1);
 
         auto pos2 = p2.getPosition();
         if (!ballInPlay && !ballOwner)
         {
-            // P2 serving: locked to upper LEFT quadrant
-            pos2.x = clamp(pos2.x, courtX + 15.f, courtX + 195.f);
-            pos2.y = clamp(pos2.y, courtY + 15.f, courtY + 240.f);
+            pos2.x = clamp(pos2.x, courtOffsetX + 15.f, courtOffsetX + 195.f);
+            pos2.y = clamp(pos2.y, courtOffsetY + 15.f, courtOffsetY + 230.f);
         }
         else
         {
             pos2.x = clamp(pos2.x, fieldLeft, fieldRight);
-            pos2.y = clamp(pos2.y, deadZoneTop + 20.f, courtY + 300.f);
+            pos2.y = clamp(pos2.y, deadZoneTop + 20.f, courtOffsetY + 300.f);
         }
         p2.setPosition(pos2);
 
@@ -495,11 +446,11 @@ else
         if (p1Swinging) { p1SwingTimer -= dt; if (p1SwingTimer <= 0.f) p1Swinging = false; }
         if (p2Swinging) { p2SwingTimer -= dt; if (p2SwingTimer <= 0.f) p2Swinging = false; }
 
-            // BALL FOLLOW SERVER
+        // BALL FOLLOW SERVER
         if (!ballInPlay)
         {
-            ballZ = 0.f;
-            ballVz = 0.f;
+            ballZ    = 0.f;
+            ballVz   = 0.f;
             ballSpin = 0.f;
             ballSprite.setRotation(sf::degrees(0.f));
             if (ballOwner)
@@ -511,14 +462,14 @@ else
         // BALL PHYSICS
         if (ballInPlay)
         {
+         
+
             auto bpos = ball.getPosition();
 
-            // CURVE SYSTEM — ball goes straight first, curves AFTER crossing net
+            // CURVE SYSTEM
             if (curveActive)
             {
-                // Only curve if ball is inside court boundaries
                 bool insideCourt = bpos.x >= courtLeftEdge && bpos.x <= courtRightEdge;
-
                 bool reached = (ballVy < 0.f && bpos.y <= curveTargetY) ||
                                (ballVy > 0.f && bpos.y >= curveTargetY);
 
@@ -532,57 +483,44 @@ else
                         if (abs(ballVx) >= abs(curveForce) * 0.75f)
                         {
                             ballVx = curveForce;
-                            curvePassed    = true;
-                            curveActive    = false;
+                            curvePassed       = true;
+                            curveActive       = false;
                             curveBounceActive = true;
                             curveBouncePhase  = -3.14159265f / 2.f;
 
-                            // DASH SWING — sharp direction change after curve locks in
+                            // DASH SWING — sharp direction change
                             if (abs(curveForce) >= 180.f)
                             {
-                                // Reverse vertical — ball suddenly drops/rises sharper
                                 ballVy *= 1.4f;
-
-                                // Double horizontal — sharp sideways snap
                                 ballVx *= 1.1f;
                                 ballVx = clamp(ballVx, -500.f, 500.f);
-
-                                // Extra spin for visual effect
                                 ballSpin *= 2.2f;
-
-                                // Bigger bounce visual
                                 curveBouncePhase = -3.14159265f;
                             }
                         }
                     }
                     else
                     {
-                        // Ball outside court — cancel curve, go straight
-                        curveActive  = false;
-                        curvePassed  = true;
-                        ballVx       = 0.f;
+                        curveActive = false;
+                        curvePassed = true;
+                        ballVx      = 0.f;
                     }
                 }
             }
 
-            // Edge slowdown — gentle, not a hard stop
+            // Edge slowdown
             if (bpos.x < fieldLeft + 50.f && ballVx < 0.f)
-                ballVx += 60.f * dt; // nudge back toward field
+                ballVx += 60.f * dt;
             if (bpos.x > fieldRight - 50.f && ballVx > 0.f)
                 ballVx -= 60.f * dt;
 
-            // Ball height simulation for fake 3D
+            // Ball height simulation
             ballVz -= ballGravityZ * dt;
             ballZ  += ballVz * dt;
-            if (ballZ < 0.f)
-            {
-                ballZ = 0.f;
-                ballVz = 0.f;
-            }
+            if (ballZ < 0.f) { ballZ = 0.f; ballVz = 0.f; }
 
             ballSpin -= ballSpin * dt * 1.4f;
-            if (abs(ballSpin) < 1.5f)
-                ballSpin = 0.f;
+            if (abs(ballSpin) < 1.5f) ballSpin = 0.f;
             if (ballSpin == 0.f)
                 ballSpin = ballVx * 0.12f + ballVy * 0.10f;
 
@@ -591,7 +529,7 @@ else
                 curveBouncePhase += dt * 8.f;
                 if (curveBouncePhase >= 3.14159265f)
                 {
-                    curveBouncePhase = 3.14159265f;
+                    curveBouncePhase  = 3.14159265f;
                     curveBounceActive = false;
                 }
             }
@@ -605,7 +543,7 @@ else
             ball.setPosition(sf::Vector2f(nextX, nextY));
             bpos = ball.getPosition();
 
-            // SCORING — only at dead zones
+            // SCORING
             if (bpos.y < deadZoneTop)
             {
                 score1++;
@@ -614,9 +552,9 @@ else
                 ballOwner   = false;
                 serving     = true;
                 curveActive = false;
-                p2.setPosition({courtX + 200.f, courtY + 120.f});
+                p2.setPosition({courtOffsetX + 100.f, courtOffsetY + 20.f});
                 serveText.setString(". to Serve (P2)");
-                serveText.setPosition({190.f, 20.f});
+                serveText.setPosition({courtOffsetX + 80.f, courtOffsetY - 80.f});
             }
 
             if (bpos.y > deadZoneBottom)
@@ -627,9 +565,9 @@ else
                 ballOwner   = true;
                 serving     = true;
                 curveActive = false;
-                p1.setPosition({courtX + 200.f, courtY + 480.f});
+                p1.setPosition({courtOffsetX + 295.f, courtOffsetY + 580.f});
                 serveText.setString("X to Serve (P1)");
-                serveText.setPosition({180.f, 760.f});
+                serveText.setPosition({courtOffsetX + 80.f, courtOffsetY + 630.f});
             }
 
             // HITBOXES
@@ -646,7 +584,7 @@ else
             // P1 HIT
             bool p1CanHit = (p1Swinging || p1Dashing) &&
                              p1HitCooldown <= 0.f &&
-                             ball.getPosition().y > p1HitZone;
+                             ball.getPosition().y > courtOffsetY + 300.f;
 
             if (p1CanHit && ballB.findIntersection(p1Hit))
             {
@@ -661,7 +599,7 @@ else
             // P2 HIT
             bool p2CanHit = (p2Swinging || p2Dashing) &&
                              p2HitCooldown <= 0.f &&
-                             ball.getPosition().y < p2HitZone;
+                             ball.getPosition().y < courtOffsetY + 300.f;
 
             if (p2CanHit && ballB.findIntersection(p2Hit))
             {
@@ -697,11 +635,13 @@ else
         }
         ballSprite.setScale(sf::Vector2f(spriteScale, spriteScale));
         ballSprite.rotate(sf::degrees(ballSpin * dt));
-        ballSprite.setPosition(sf::Vector2f(ball.getPosition().x, ball.getPosition().y - ballZ * 0.6f));
+        ballSprite.setPosition(sf::Vector2f(ball.getPosition().x,
+                                             ball.getPosition().y - ballZ * 0.6f));
 
         float shadowScale = clamp(1.f - heightRatio * 0.25f, 0.7f, 1.f);
         ballShadow.setScale(sf::Vector2f(shadowScale, shadowScale * 0.45f));
-        ballShadow.setPosition(sf::Vector2f(ball.getPosition().x, ball.getPosition().y + 6.f));
+        ballShadow.setPosition(sf::Vector2f(ball.getPosition().x,
+                                             ball.getPosition().y + 6.f));
 
         window.draw(ballShadow);
         window.draw(ballSprite);
@@ -709,8 +649,10 @@ else
         window.draw(score2Text);
         window.draw(serveText);
 
-        p1PosText.setString("P1 (" + to_string((int)p1.getPosition().x) + ", " + to_string((int)p1.getPosition().y) + ")");
-        p2PosText.setString("P2 (" + to_string((int)p2.getPosition().x) + ", " + to_string((int)p2.getPosition().y) + ")");
+        p1PosText.setString("P1 (" + to_string((int)p1.getPosition().x) + ", " +
+                             to_string((int)p1.getPosition().y) + ")");
+        p2PosText.setString("P2 (" + to_string((int)p2.getPosition().x) + ", " +
+                             to_string((int)p2.getPosition().y) + ")");
         window.draw(p1PosText);
         window.draw(p2PosText);
 
