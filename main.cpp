@@ -119,10 +119,10 @@ int main()
     float p1IdleInterval = 0.55f;
     int   p1IdleFrame    = 0;
 
-    // Side walk cycle — alternates step1/step2 together (both legs alternate)
+    // Side walk cycle — 3-frame cycle: step1 -> normal -> step2
     float p1WalkTimer    = 0.f;
     float p1WalkInterval = 0.18f;
-    int   p1WalkFrame    = 0;   // 0 = step1, 1 = step2
+    int   p1WalkFrame    = 0;   // 0 = step1, 1 = normal, 2 = step2
     bool  p1FacingLeft   = false;
 
     // Forward/back walk cycle
@@ -559,7 +559,7 @@ sf::CircleShape ball(6.f);
             if (p1WalkTimer >= p1WalkInterval)
             {
                 p1WalkTimer -= p1WalkInterval;
-                p1WalkFrame  = 1 - p1WalkFrame; // alternate step1 <-> step2
+                p1WalkFrame = (p1WalkFrame + 1) % 3; // cycle 0 -> 1 -> 2
             }
         }
         else if (p1MovingFwd)
@@ -580,6 +580,9 @@ sf::CircleShape ball(6.f);
             p1WalkTimer = 0.f;
             p1FwdTimer  = 0.f;
 
+            // reset walk frame when idle so walk starts predictably
+            p1WalkFrame = 0;
+
             p1IdleTimer += dt;
             if (p1IdleTimer >= p1IdleInterval)
             {
@@ -595,8 +598,13 @@ sf::CircleShape ball(6.f);
             p1Sprite.setTexture(p1SwingAnimFrame == 0 ? p1TexSwing1 : p1TexSwing2);
             break;
         case P1Anim::WalkSide:
-            p1Sprite.setTexture(p1WalkFrame == 0 ? p1TexStep1 : p1TexStep2);
-            break;
+        {
+            int displayFrame = p1FacingLeft ? (2 - p1WalkFrame) : p1WalkFrame;
+            if (displayFrame == 0) p1Sprite.setTexture(p1TexStep1);
+            else if (displayFrame == 1) p1Sprite.setTexture(p1TexNormal);
+            else p1Sprite.setTexture(p1TexStep2);
+        }
+        break;
         case P1Anim::WalkFwd:
             p1Sprite.setTexture(p1FwdFrame == 0 ? p1TexFwd1 : p1TexFwd2);
             break;
@@ -615,8 +623,8 @@ sf::CircleShape ball(6.f);
            const float targetW = 72.f;
 const float targetH = 96.f;
 float baseScale = min(targetW / tw, targetH / th);
-            bool mirrorSide = (p1AnimState == P1Anim::WalkSide && !p1FacingLeft);
-            p1Sprite.setScale({ mirrorSide ? -baseScale : baseScale, baseScale });
+            bool mirror = p1FacingLeft;
+            p1Sprite.setScale({ mirror ? -baseScale : baseScale, baseScale });
         }
 
         // Position sprite at same centre as the hitbox rectangle
