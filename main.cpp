@@ -60,30 +60,45 @@
     float courtOffsetX = (bgW - 400.f) / 2.f;
     float courtOffsetY = (bgH - 600.f) / 2.f;
 
+    // Absolute court geometry for the new court texture
+    const float courtLeft      = 495.f;
+    const float courtRight     = 880.f;
+    const float courtCenter    = 690.f;
+    const float netY           = 375.f;
+    const float courtTopEdge   = 90.f;
+    const float courtBottomEdge= 665.f;
+
+    const float courtLeftEdge  = courtLeft + 15.f;
+    const float courtRightEdge = courtRight - 15.f;
+    const float fieldLeft      = courtLeft - 80.f;
+    const float fieldRight     = courtRight + 80.f;
+    const float deadZoneTop    = courtTopEdge - 20.f;
+    const float deadZoneBottom = courtBottomEdge + 20.f;
+
     // Invisible shapes for collision/logic only — not drawn
-    sf::RectangleShape court({400.f, 600.f});
+    sf::RectangleShape court({courtRight - courtLeft, courtBottomEdge - courtTopEdge});
     court.setFillColor(sf::Color::Transparent);
     court.setOutlineColor(sf::Color::Transparent);
-    court.setPosition({courtOffsetX, courtOffsetY});
+    court.setPosition({courtLeft, courtTopEdge});
 
-    sf::RectangleShape netLine({400.f, 10.f});
+    sf::RectangleShape netLine({courtRight - courtLeft, 10.f});
     netLine.setFillColor(sf::Color::Transparent);
-    netLine.setPosition({courtOffsetX, courtOffsetY + 295.f});
+    netLine.setPosition({courtLeft, netY - 5.f});
 
-    sf::RectangleShape midLine({3.f, 600.f});
+    sf::RectangleShape midLine({3.f, courtBottomEdge - courtTopEdge});
     midLine.setFillColor(sf::Color::Transparent);
-    midLine.setPosition({courtOffsetX + 198.5f, courtOffsetY});
+    midLine.setPosition({courtCenter - 1.5f, courtTopEdge});
 
             // PLAYERS
             sf::RectangleShape p1({30.f, 40.f});
             p1.setFillColor(sf::Color::Red);
             p1.setOrigin({15.f, 20.f});
-            p1.setPosition({courtOffsetX + 295.f, courtOffsetY + 580.f});
+            p1.setPosition({courtLeft + 295.f, courtBottomEdge});
 
             sf::RectangleShape p2({30.f, 40.f});
             p2.setFillColor(sf::Color(128, 0, 200));
             p2.setOrigin({15.f, 20.f});
-            p2.setPosition({courtOffsetX + 100.f, courtOffsetY + 20.f});
+            p2.setPosition({courtLeft + 100.f, courtTopEdge});
 
             // BALL
             sf::CircleShape ball(10.f);
@@ -91,7 +106,7 @@
             ball.setOutlineColor(sf::Color::Black);
             ball.setOutlineThickness(2.f);
             ball.setOrigin({10.f, 10.f});
-            ball.setPosition({courtOffsetX + 295.f, courtOffsetY + 550.f});
+            ball.setPosition({courtLeft + 295.f, courtBottomEdge - 35.f});
 
             sf::Texture ballTexture;
             if (!ballTexture.loadFromFile("ball.png"))
@@ -147,17 +162,6 @@
             float p1HitCooldown = 0.f, p2HitCooldown = 0.f;
             const float hitCooldown = 0.3f;
 
-            // BOUNDARIES — all relative to centered court
-            const float deadZoneTop    = courtOffsetY - 20.f;
-            const float deadZoneBottom = courtOffsetY + 620.f;
-            const float fieldLeft      = courtOffsetX - 80.f;
-            const float fieldRight     = courtOffsetX + 480.f;
-            const float courtLeft      = courtOffsetX;
-            const float courtRight     = courtOffsetX + 400.f;
-            const float courtCenter    = courtOffsetX + 200.f;
-            const float courtLeftEdge  = courtOffsetX + 15.f;
-            const float courtRightEdge = courtOffsetX + 385.f;
-
             int score1 = 0, score2 = 0;
 
             sf::Font font;
@@ -166,15 +170,15 @@
 
             sf::Text score1Text(font, "P1: 0", 28);
             score1Text.setFillColor(sf::Color::White);
-            score1Text.setPosition({courtOffsetX - 80.f, courtOffsetY + 620.f});
+            score1Text.setPosition({courtLeft - 80.f, courtBottomEdge + 20.f});
 
             sf::Text score2Text(font, "P2: 0", 28);
             score2Text.setFillColor(sf::Color::White);
-            score2Text.setPosition({courtOffsetX + 320.f, courtOffsetY - 80.f});
+            score2Text.setPosition({courtRight - 180.f, courtTopEdge - 50.f});
 
             sf::Text serveText(font, "X to Serve (P1)", 20);
             serveText.setFillColor(sf::Color::Yellow);
-            serveText.setPosition({courtOffsetX + 80.f, courtOffsetY + 630.f});
+            serveText.setPosition({courtLeft + 80.f, courtBottomEdge + 20.f});
 
             sf::CircleShape p1SwingCircle(35.f);
             p1SwingCircle.setFillColor(sf::Color(255, 255, 0, 120));
@@ -186,11 +190,11 @@
 
             sf::Text p1PosText(font, "P1 (0, 0)", 16);
             p1PosText.setFillColor(sf::Color::Yellow);
-            p1PosText.setPosition({courtOffsetX - 80.f, courtOffsetY + 590.f});
+            p1PosText.setPosition({courtLeft - 80.f, courtBottomEdge - 40.f});
 
             sf::Text p2PosText(font, "P2 (0, 0)", 16);
             p2PosText.setFillColor(sf::Color::Cyan);
-            p2PosText.setPosition({courtOffsetX - 80.f, courtOffsetY - 60.f});
+            p2PosText.setPosition({courtLeft - 80.f, courtTopEdge + 40.f});
 
             auto aimIntoCourt = [&](float dirX, float fromX) -> float
             {
@@ -246,7 +250,7 @@
                         ballSpin = -700.f;
                 }
 
-                curveTargetY = courtOffsetY + 175.f;
+                curveTargetY = courtTopEdge + 175.f;
                 curveForce   = (dirX != 0.f) ? dirX * (dashing ? 220.f : 125.f) : 0.f;
                 curvePending = edgeHit;
                 curveActive  = !curvePending && (dirX != 0.f);
@@ -294,7 +298,7 @@
                         ballSpin = 700.f;
                 }
 
-                curveTargetY = courtOffsetY + 425.f;
+                curveTargetY = courtTopEdge + 425.f;
                 curveForce   = (dirX != 0.f) ? dirX * (dashing ? 220.f : 125.f) : 0.f;
                 curvePending = edgeHit;
                 curveActive  = !curvePending && (dirX != 0.f);
@@ -452,26 +456,26 @@
                 auto pos1 = p1.getPosition();
                 if (!ballInPlay && ballOwner)
                 {
-                    pos1.x = clamp(pos1.x, courtOffsetX + 205.f, courtOffsetX + 385.f);
-                    pos1.y = clamp(pos1.y, courtOffsetY + 360.f, courtOffsetY + 585.f);
+                    pos1.x = clamp(pos1.x, courtCenter, courtRight);
+                    pos1.y = clamp(pos1.y, courtTopEdge + 360.f, courtBottomEdge);
                 }
                 else
                 {
                     pos1.x = clamp(pos1.x, fieldLeft, fieldRight);
-                    pos1.y = clamp(pos1.y, courtOffsetY + 300.f, deadZoneBottom - 20.f);
+                    pos1.y = clamp(pos1.y, netY + 20.f, deadZoneBottom - 20.f);
                 }
                 p1.setPosition(pos1);
 
                 auto pos2 = p2.getPosition();
                 if (!ballInPlay && !ballOwner)
                 {
-                    pos2.x = clamp(pos2.x, courtOffsetX + 15.f, courtOffsetX + 195.f);
-                    pos2.y = clamp(pos2.y, courtOffsetY + 15.f, courtOffsetY + 230.f);
+                    pos2.x = clamp(pos2.x, courtLeft, courtCenter);
+                    pos2.y = clamp(pos2.y, courtTopEdge, courtTopEdge + 230.f);
                 }
                 else
                 {
                     pos2.x = clamp(pos2.x, fieldLeft, fieldRight);
-                    pos2.y = clamp(pos2.y, deadZoneTop + 20.f, courtOffsetY + 300.f);
+                    pos2.y = clamp(pos2.y, deadZoneTop + 20.f, netY - 20.f);
                 }
                 p2.setPosition(pos2);
 
@@ -619,9 +623,9 @@
                         serving     = true;
                         curveActive = false;
                         curvePending = false;
-                        p2.setPosition({courtOffsetX + 100.f, courtOffsetY + 20.f});
+                        p2.setPosition({courtLeft + 100.f, courtTopEdge});
                         serveText.setString(". to Serve (P2)");
-                        serveText.setPosition({courtOffsetX + 80.f, courtOffsetY - 80.f});
+                        serveText.setPosition({courtLeft + 80.f, courtTopEdge - 50.f});
                     }
 
                     if (bpos.y > deadZoneBottom)
@@ -633,9 +637,9 @@
                         serving     = true;
                         curveActive = false;
                         curvePending = false;
-                        p1.setPosition({courtOffsetX + 295.f, courtOffsetY + 580.f});
+                        p1.setPosition({courtLeft + 295.f, courtBottomEdge});
                         serveText.setString("X to Serve (P1)");
-                        serveText.setPosition({courtOffsetX + 80.f, courtOffsetY + 630.f});
+                        serveText.setPosition({courtLeft + 80.f, courtBottomEdge + 20.f});
                     }
 
                     // HITBOXES
@@ -652,7 +656,7 @@
                     // P1 HIT
                     bool p1CanHit = (p1Swinging || p1Dashing) &&
                                     p1HitCooldown <= 0.f &&
-                                    ball.getPosition().y > courtOffsetY + 300.f;
+                                    ball.getPosition().y > netY + 25.f;
 
                     if (p1CanHit && ballB.findIntersection(p1Hit))
                     {
@@ -667,7 +671,7 @@
                     // P2 HIT
                     bool p2CanHit = (p2Swinging || p2Dashing) &&
                                     p2HitCooldown <= 0.f &&
-                                    ball.getPosition().y < courtOffsetY + 300.f;
+                                    ball.getPosition().y < netY - 25.f;
 
                     if (p2CanHit && ballB.findIntersection(p2Hit))
                     {
@@ -681,8 +685,8 @@
                 }
 
                 // DRAW
-       window.clear();
-        window.draw(bgCourtSprite); // BG.png fills entire window
+                window.clear();
+                window.draw(bgCourtSprite); // BG.png fills entire window
 
                 if (p1Swinging) { p1SwingCircle.setPosition(p1.getPosition()); window.draw(p1SwingCircle); }
                 if (p2Swinging) { p2SwingCircle.setPosition(p2.getPosition()); window.draw(p2SwingCircle); }
@@ -723,3 +727,4 @@
                 window.display();
             }
         }
+
