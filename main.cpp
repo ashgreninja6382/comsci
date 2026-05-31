@@ -102,10 +102,10 @@ int main()
     sf::Sprite p1Sprite(p1TexNormal);
     p1Sprite.setOrigin(sf::Vector2f(
         p1TexNormal.getSize().x / 2.f,
-        p1TexNormal.getSize().y / 2.f   // bottom-centre origin to match rect
+        p1TexNormal.getSize().y / 2.f
     ));
 
-  // P1 forward/back textures
+    // P1 forward/back textures
     sf::Texture p1TexFwd1, p1TexFwd2;
     if (!p1TexFwd1.loadFromFile("forward1.png")) return 1;
     if (!p1TexFwd2.loadFromFile("forward2.png")) return 1;
@@ -225,10 +225,6 @@ int main()
     sf::Text serveText(font, "X to Serve (P1)", 20);
     serveText.setFillColor(sf::Color::Yellow);
     serveText.setPosition({courtLeft + 80.f, courtBottomEdge + 20.f});
-
-    sf::CircleShape p1SwingCircle(35.f);
-    p1SwingCircle.setFillColor(sf::Color(255, 255, 0, 120));
-    p1SwingCircle.setOrigin({35.f, 35.f});
 
     sf::CircleShape p2SwingCircle(35.f);
     p2SwingCircle.setFillColor(sf::Color(0, 200, 255, 120));
@@ -610,18 +606,15 @@ int main()
             break;
         }
 
-        // Flip horizontally when facing left (side walk only)
         {
             auto texSize = p1Sprite.getTexture().getSize();
             float tw = static_cast<float>(texSize.x);
             float th = static_cast<float>(texSize.y);
             p1Sprite.setOrigin({tw / 2.f, th / 2.f});
 
-            // Only flip for side movement — forward/idle/swing face forward
-            if (p1AnimState == P1Anim::WalkSide && p1FacingLeft)
-                p1Sprite.setScale({-1.f, 1.f});
-            else
-                p1Sprite.setScale({ 1.f, 1.f});
+            float baseScale = min(p1.getSize().x / tw, p1.getSize().y / th);
+            bool mirrorSide = (p1AnimState == P1Anim::WalkSide && !p1FacingLeft);
+            p1Sprite.setScale({ mirrorSide ? -baseScale : baseScale, baseScale });
         }
 
         // Position sprite at same centre as the hitbox rectangle
@@ -800,15 +793,18 @@ int main()
 
         float heightRatio = clamp(ballZ / 120.f, 0.f, 1.f);
 
-        float shadowBaseScale = clamp(1.f - heightRatio * 0.30f, 0.70f, 1.f);
-        int shadowAlpha = (int)(220.f - heightRatio * 80.f);
-        if (shadowAlpha < 80)  shadowAlpha = 80;
-        if (shadowAlpha > 220) shadowAlpha = 220;
-        ballShadow.setFillColor(sf::Color(0, 0, 0, shadowAlpha));
-        ballShadow.setScale(sf::Vector2f(shadowBaseScale, shadowBaseScale * 0.42f));
-        ballShadow.setPosition(sf::Vector2f(ball.getPosition().x,
-                                            ball.getPosition().y + 8.f));
-        window.draw(ballShadow);
+        if (ballInPlay)
+        {
+            float shadowBaseScale = clamp(1.f - heightRatio * 0.30f, 0.70f, 1.f);
+            int shadowAlpha = (int)(220.f - heightRatio * 80.f);
+            if (shadowAlpha < 80)  shadowAlpha = 80;
+            if (shadowAlpha > 220) shadowAlpha = 220;
+            ballShadow.setFillColor(sf::Color(0, 0, 0, shadowAlpha));
+            ballShadow.setScale(sf::Vector2f(shadowBaseScale, shadowBaseScale * 0.42f));
+            ballShadow.setPosition(sf::Vector2f(ball.getPosition().x,
+                                                ball.getPosition().y + 8.f));
+            window.draw(ballShadow);
+        }
 
         // Draw P1 sprite instead of rectangle
         window.draw(p1Sprite);
@@ -858,7 +854,8 @@ int main()
             ball.getPosition().x,
             ball.getPosition().y - ballZ * 0.62f
         ));
-        window.draw(ballSprite);
+        if (ballInPlay)
+            window.draw(ballSprite);
 
         window.draw(score1Text);
         window.draw(score2Text);
