@@ -68,10 +68,10 @@
     const float courtTopEdge   = 90.f;
     const float courtBottomEdge= 665.f;
 
-    const float courtLeftEdge  = courtLeft + 15.f;
-    const float courtRightEdge = courtRight - 15.f;
-    const float fieldLeft      = courtLeft - 80.f;
-    const float fieldRight     = courtRight + 80.f;
+    const float courtLeftEdge  = courtLeft;
+    const float courtRightEdge = courtRight;
+    const float fieldLeft      = courtLeft - 100.f;
+    const float fieldRight     = courtRight + 100.f;
     const float deadZoneTop    = courtTopEdge - 20.f;
     const float deadZoneBottom = courtBottomEdge + 20.f;
 
@@ -119,7 +119,7 @@
 
             sf::CircleShape ballShadow(12.f);
             ballShadow.setFillColor(sf::Color(0, 0, 0, 120));
-            ballShadow.setOrigin({12.f, 6.f});
+            ballShadow.setOrigin({12.f, 12.f});
 
             float ballVx = 0.f;
             float ballVy = 0.f;
@@ -198,14 +198,14 @@
 
             auto aimIntoCourt = [&](float dirX, float fromX) -> float
             {
-                if (fromX < courtLeft)  return 1.f;
-                if (fromX > courtRight) return -1.f;
+                if (fromX < fieldLeft)  return 1.f;
+                if (fromX > fieldRight) return -1.f;
                 return dirX;
             };
 
             auto isNearCourtSideEdge = [&](float x)
             {
-                const float edgeThreshold = 50.f;
+                const float edgeThreshold = 25.f;
                 return x <= courtLeft + edgeThreshold || x >= courtRight - edgeThreshold;
             };
 
@@ -253,7 +253,17 @@
                 curveTargetY = courtTopEdge + 175.f;
                 curveForce   = (dirX != 0.f) ? dirX * (dashing ? 220.f : 125.f) : 0.f;
                 curvePending = edgeHit;
-                curveActive  = !curvePending && (dirX != 0.f);
+                bool outsideField = ball.getPosition().x < courtLeft || ball.getPosition().x > courtRight;
+                if (outsideField)
+                {
+                    curveForce   = 0.f;
+                    curvePending = false;
+                    curveActive  = false;
+                }
+                else
+                {
+                    curveActive  = !curvePending && (dirX != 0.f);
+                }
                 curvePassed  = false;
                 ballInPlay   = true;
             };
@@ -301,7 +311,17 @@
                 curveTargetY = courtTopEdge + 425.f;
                 curveForce   = (dirX != 0.f) ? dirX * (dashing ? 220.f : 125.f) : 0.f;
                 curvePending = edgeHit;
-                curveActive  = !curvePending && (dirX != 0.f);
+                bool outsideField = ball.getPosition().x < courtLeft || ball.getPosition().x > courtRight;
+                if (outsideField)
+                {
+                    curveForce   = 0.f;
+                    curvePending = false;
+                    curveActive  = false;
+                }
+                else
+                {
+                    curveActive  = !curvePending && (dirX != 0.f);
+                }
                 curvePassed  = false;
                 ballInPlay   = true;
             };
@@ -567,10 +587,8 @@
                     }
 
                 // Edge slowdown
-                    if (bpos.x < fieldLeft + 50.f && ballVx < 0.f)
-                        ballVx += 80.f * dt;
-                    if (bpos.x > fieldRight - 50.f && ballVx > 0.f)
-                        ballVx -= 80.f * dt;
+               if (bpos.x < fieldLeft + 15.f && ballVx < 0.f)  ballVx += 80.f * dt;
+if (bpos.x > fieldRight - 15.f && ballVx > 0.f) ballVx -= 80.f * dt;
 
                     // Hard wall — bounce back inside
                     if (bpos.x <= fieldLeft)
@@ -587,7 +605,7 @@
                     // Ball height simulation
                     ballVz -= ballGravityZ * dt;
                     ballZ  += ballVz * dt;
-                    if (ballZ < 0.f) { ballZ = 0.f; ballVz = 0.f; }
+                    if (ballZ < 0.f) { ballZ = 0.f; if (ballVz < 0.f) ballVz = 0.f; }
 
                     ballSpin -= ballSpin * dt * 1.4f;
                     if (abs(ballSpin) < 1.5f) ballSpin = 0.f;
@@ -608,7 +626,7 @@
                     ballVx = clamp(ballVx, -550.f, 550.f);
                     ballVy = clamp(ballVy, -600.f, 600.f);
 
-                    float nextX = clamp(bpos.x + ballVx * dt, fieldLeft, fieldRight);
+              float nextX = clamp(bpos.x + ballVx * dt, fieldLeft, fieldRight);
                     float nextY = bpos.y + ballVy * dt;
                     ball.setPosition(sf::Vector2f(nextX, nextY));
                     bpos = ball.getPosition();
@@ -642,7 +660,7 @@
                         serveText.setPosition({courtLeft + 80.f, courtBottomEdge + 20.f});
                     }
 
-                    // HITBOXES
+                    // HITBOXESfloat nextX = bpos.x + ballVx * dt;
                     sf::FloatRect ballB = ball.getGlobalBounds();
 
                     sf::FloatRect p1Hit = p1.getGlobalBounds();
@@ -691,10 +709,18 @@
                 if (p1Swinging) { p1SwingCircle.setPosition(p1.getPosition()); window.draw(p1SwingCircle); }
                 if (p2Swinging) { p2SwingCircle.setPosition(p2.getPosition()); window.draw(p2SwingCircle); }
 
+                // Draw players above the shadow. Compute height-based shadow params first.
+                float heightRatio = clamp(ballZ / 120.f, 0.f, 1.f);
+                float shadowScale = clamp(1.f - heightRatio * 0.15f, 0.85f, 1.f);
+float shadowYOffset = 4.f + heightRatio * 6.f;
+ballShadow.setScale(sf::Vector2f(shadowScale, shadowScale * 0.45f));
+                ballShadow.setPosition(sf::Vector2f(ball.getPosition().x,
+                                                    ball.getPosition().y + shadowYOffset));
+                window.draw(ballShadow);
+
                 window.draw(p1);
                 window.draw(p2);
 
-                float heightRatio = clamp(ballZ / 120.f, 0.f, 1.f);
                 float spriteScale = 0.8f + heightRatio * 0.18f;
                 if (curveBounceActive)
                 {
@@ -706,12 +732,6 @@
                 ballSprite.setPosition(sf::Vector2f(ball.getPosition().x,
                                                     ball.getPosition().y - ballZ * 0.6f));
 
-                float shadowScale = clamp(1.f - heightRatio * 0.25f, 0.7f, 1.f);
-                ballShadow.setScale(sf::Vector2f(shadowScale, shadowScale * 0.45f));
-                ballShadow.setPosition(sf::Vector2f(ball.getPosition().x,
-                                                    ball.getPosition().y + 6.f));
-
-                window.draw(ballShadow);
                 window.draw(ballSprite);
                 window.draw(score1Text);
                 window.draw(score2Text);
