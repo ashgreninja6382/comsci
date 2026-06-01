@@ -1,4 +1,5 @@
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <cmath>
 #include <algorithm>
 #include <optional>
@@ -8,8 +9,13 @@ using namespace std;
 
 int main()
 {
-    // LOAD BACKGROUND
-    sf::Texture backgroundTexture;
+    bool restartRequested = false;
+    do
+    {
+        restartRequested = false;
+
+        // LOAD BACKGROUND
+        sf::Texture backgroundTexture;
     if (!backgroundTexture.loadFromFile("background.png"))
         return 1;
 
@@ -129,6 +135,23 @@ int main()
     sf::Texture p1TexFwd1, p1TexFwd2;
     if (!p1TexFwd1.loadFromFile("forward1.png")) return 1;
     if (!p1TexFwd2.loadFromFile("forward2.png")) return 1;
+
+    // ── SCORE / SIGH TEXTURES (animations played when someone scores)
+    sf::Texture p1ScoreTex1, p1ScoreTex2, p1SighTex;
+    sf::Texture p2ScoreTex, p2ScoreTex2, p2SighTex;
+    if (!p1ScoreTex1.loadFromFile("p1score1.png")) return 1;
+    if (!p1ScoreTex2.loadFromFile("p1score2.png")) return 1;
+    if (!p1SighTex.loadFromFile("p1sigh.png")) return 1;
+    if (!p2ScoreTex.loadFromFile("p2score.png")) return 1;
+    if (!p2ScoreTex2.loadFromFile("P2.png")) return 1;
+    if (!p2SighTex.loadFromFile("p2sigh.png")) return 1;
+
+    sf::Sprite p1ScoreSprite1(p1ScoreTex1);
+    sf::Sprite p1ScoreSprite2(p1ScoreTex2);
+    sf::Sprite p1SighSprite(p1SighTex);
+    sf::Sprite p2ScoreSprite(p2ScoreTex);
+    sf::Sprite p2ScoreSprite2(p2ScoreTex2);
+    sf::Sprite p2SighSprite(p2SighTex);
 
     // P1 animation state
     enum class P1Anim { Idle, WalkSide, WalkFwd, Swing };
@@ -255,33 +278,74 @@ sf::CircleShape ball(6.f);
 
     int score1 = 0, score2 = 0;
 
+    // Score animation state
+    enum class ScoreState { None, P1Scored, P2Scored };
+    ScoreState scoreState = ScoreState::None;
+    float scoreStateTimer = 0.f;
+    const float scoreStateDuration = 2.0f; // 2 seconds for animations
+
+    const int maxScore = 10;
+    bool gameOver = false;
+
+    // P1 score animation (two frames)
+    float p1ScoreFrameTimer = 0.f;
+    const float p1ScoreFrameDur = 0.35f;
+    int p1ScoreFrame = 0; // 0 or 1
+    // P2 score animation (two frames)
+    float p2ScoreFrameTimer = 0.f;
+    const float p2ScoreFrameDur = 0.35f;
+    int p2ScoreFrame = 0;
+
     sf::Font font;
     if (!font.openFromFile("C:/Windows/Fonts/arial.ttf"))
         return 1;
 
-    sf::Text score1Text(font, "P1: 0", 28);
+    sf::RectangleShape scorePanel({420.f, 72.f});
+    scorePanel.setFillColor(sf::Color(0, 0, 0, 170));
+    scorePanel.setOutlineThickness(2.f);
+    scorePanel.setOutlineColor(sf::Color::White);
+    scorePanel.setPosition({bgW / 2.f - 210.f, 14.f});
+
+    sf::Text score1Text(font, "P1: 0", 32);
     score1Text.setFillColor(sf::Color::White);
-    score1Text.setPosition({courtLeft - 80.f, courtBottomEdge + 20.f});
+    score1Text.setStyle(sf::Text::Bold);
+    score1Text.setOutlineColor(sf::Color::Black);
+    score1Text.setOutlineThickness(2.f);
+    score1Text.setPosition({scorePanel.getPosition().x + 28.f, scorePanel.getPosition().y + 16.f});
 
-    sf::Text score2Text(font, "P2: 0", 28);
+    sf::Text score2Text(font, "P2: 0", 32);
     score2Text.setFillColor(sf::Color::White);
-    score2Text.setPosition({courtRight - 180.f, courtTopEdge - 50.f});
+    score2Text.setStyle(sf::Text::Bold);
+    score2Text.setOutlineColor(sf::Color::Black);
+    score2Text.setOutlineThickness(2.f);
+    score2Text.setPosition({scorePanel.getPosition().x + 262.f, scorePanel.getPosition().y + 16.f});
 
-    sf::Text serveText(font, "X to Serve (P1)", 20);
+    sf::Text serveText(font, "X to Serve (P1)", 22);
     serveText.setFillColor(sf::Color::Yellow);
-    serveText.setPosition({courtLeft + 80.f, courtBottomEdge + 20.f});
+    serveText.setStyle(sf::Text::Bold);
+    serveText.setPosition({courtLeft + 42.f, courtBottomEdge + 20.f});
+
+    sf::Text restartText(font, "Press R to return to menu", 20);
+    restartText.setFillColor(sf::Color::Yellow);
+    restartText.setOutlineColor(sf::Color::Black);
+    restartText.setOutlineThickness(1.f);
+    restartText.setPosition({courtLeft + 80.f, courtBottomEdge + 50.f});
+
+    sf::Text winText(font, "", 42);
+    winText.setFillColor(sf::Color::Green);
+    winText.setStyle(sf::Text::Bold);
+    winText.setOutlineColor(sf::Color::Black);
+    winText.setOutlineThickness(3.f);
+
+    sf::Text winPrompt(font, "Press R to return to menu", 24);
+    winPrompt.setFillColor(sf::Color::Yellow);
+    winPrompt.setStyle(sf::Text::Bold);
+    winPrompt.setOutlineColor(sf::Color::Black);
+    winPrompt.setOutlineThickness(2.f);
 
     sf::CircleShape p2SwingCircle(35.f);
     p2SwingCircle.setFillColor(sf::Color(0, 200, 255, 120));
     p2SwingCircle.setOrigin({35.f, 35.f});
-
-    sf::Text p1PosText(font, "P1 (0, 0)", 16);
-    p1PosText.setFillColor(sf::Color::Yellow);
-    p1PosText.setPosition({courtLeft - 80.f, courtBottomEdge - 40.f});
-
-    sf::Text p2PosText(font, "P2 (0, 0)", 16);
-    p2PosText.setFillColor(sf::Color::Cyan);
-    p2PosText.setPosition({courtLeft - 80.f, courtTopEdge + 40.f});
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     auto aimIntoCourt = [&](float dirX, float fromX) -> float
@@ -492,9 +556,17 @@ sf::CircleShape ball(6.f);
                     p2SwingAnimDone  = false;
                     p2AnimState      = P1Anim::Swing;
                 }
+
+                if (key->code == sf::Keyboard::Key::R)
+                {
+                    restartRequested = true;
+                    window.close();
+                }
             }
         }
 
+        if (!gameOver)
+        {
         // ── P1 MOVEMENT ───────────────────────────────────────────────────────
         bool p1Moving = false;
         float p1MoveX = 0.f;
@@ -545,24 +617,26 @@ sf::CircleShape ball(6.f);
         if (!ballInPlay && ballOwner)
         {
             pos1.x = clamp(pos1.x, courtCenter, courtRight);
+            pos1.y = courtBottomEdge;
         }
         else
         {
             pos1.x = clamp(pos1.x, fieldLeft, fieldRight);
+            pos1.y = clamp(pos1.y, 496.f, courtBottomEdge);
         }
-        pos1.y = clamp(pos1.y, 496.f, courtBottomEdge);
         p1.setPosition(pos1);
 
         auto pos2 = p2.getPosition();
         if (!ballInPlay && !ballOwner)
         {
             pos2.x = clamp(pos2.x, courtLeft, courtCenter);
+            pos2.y = courtTopEdge;
         }
         else
         {
             pos2.x = clamp(pos2.x, fieldLeft, fieldRight);
+            pos2.y = clamp(pos2.y, courtTopEdge, 224.f);
         }
-        pos2.y = clamp(pos2.y, courtTopEdge, 224.f);
         p2.setPosition(pos2);
 
         if (p1Swinging) { p1SwingTimer -= dt; if (p1SwingTimer <= 0.f) { p1Swinging = false; } }
@@ -806,6 +880,83 @@ float baseScale = min(targetW / tw, targetH / th);
 
         p2Sprite.setPosition(p2.getPosition());
 
+        // ── SCORE/SIGH SPRITE SYNC — recompute every frame so position and scale
+        //    always match the live p2Sprite, never a stale snapshot
+        {
+            const float targetW = 72.f;
+            const float targetH = 96.f;
+            bool mirror = p2FacingLeft;
+
+            // P2 score sprites (shown when P2 scored)
+            {
+                auto texSize = p2ScoreTex.getSize();
+                float tw = (float)texSize.x, th = (float)texSize.y;
+                float baseScale = min(targetW / tw, targetH / th);
+                const float p2OverlayScale = 1.30f;
+                float sx = mirror ? -baseScale * p2OverlayScale : baseScale * p2OverlayScale;
+                p2ScoreSprite.setOrigin({tw / 2.f, th / 2.f});
+                p2ScoreSprite.setScale({sx, baseScale * p2OverlayScale});
+                p2ScoreSprite.setPosition(p2.getPosition());
+            }
+            {
+                auto texSize = p2ScoreTex2.getSize();
+                float tw = (float)texSize.x, th = (float)texSize.y;
+                float baseScale = min(targetW / tw, targetH / th);
+                const float p2OverlayScale = 1.15f;
+                float sx = mirror ? -baseScale * p2OverlayScale : baseScale * p2OverlayScale;
+                p2ScoreSprite2.setOrigin({tw / 2.f, th / 2.f});
+                p2ScoreSprite2.setScale({sx, baseScale * p2OverlayScale});
+                p2ScoreSprite2.setPosition(p2.getPosition());
+            }
+
+            // P2 sigh sprite (shown when P1 scored)
+            {
+                auto texSize = p2SighTex.getSize();
+                float tw = (float)texSize.x, th = (float)texSize.y;
+                float baseScale = min(targetW / tw, targetH / th);
+                const float p2OverlayScale = 1.30f;
+                float sx = mirror ? -baseScale * p2OverlayScale : baseScale * p2OverlayScale;
+                p2SighSprite.setOrigin({tw / 2.f, th / 2.f});
+                p2SighSprite.setScale({sx, baseScale * p2OverlayScale});
+                p2SighSprite.setPosition(p2.getPosition());
+            }
+        }
+
+        // ── P1 SIGH SPRITE SYNC (shown when P2 scored) ───────────────────────────
+        {
+            const float targetW = 72.f;
+            const float targetH = 96.f;
+            bool mirror = p1FacingLeft;
+
+            auto texSize = p1SighTex.getSize();
+            float tw = (float)texSize.x, th = (float)texSize.y;
+            float baseScale = min(targetW / tw, targetH / th);
+            float sx = mirror ? -baseScale : baseScale;
+            p1SighSprite.setOrigin({tw / 2.f, th / 2.f});
+            p1SighSprite.setScale({sx, baseScale});
+            p1SighSprite.setPosition(p1.getPosition());
+        }
+
+        // ── P1 SCORE SPRITES SYNC (shown when P1 scored) ─────────────────────────
+        {
+            const float targetW = 72.f;
+            const float targetH = 96.f;
+            bool mirror = p1FacingLeft;
+
+            auto syncScoreSprite = [&](sf::Sprite& spr, const sf::Texture& tex)
+            {
+                auto texSize = tex.getSize();
+                float tw = (float)texSize.x, th = (float)texSize.y;
+                float baseScale = min(targetW / tw, targetH / th);
+                float sx = mirror ? -baseScale : baseScale;
+                spr.setOrigin({tw / 2.f, th / 2.f});
+                spr.setScale({sx, baseScale});
+                spr.setPosition(p1.getPosition());
+            };
+            syncScoreSprite(p1ScoreSprite1, p1ScoreTex1);
+            syncScoreSprite(p1ScoreSprite2, p1ScoreTex2);
+        }
+
         // BALL FOLLOW SERVER
         if (!ballInPlay)
         {
@@ -913,21 +1064,42 @@ float baseScale = min(targetW / tw, targetH / th);
             {
                 score1++;
                 score1Text.setString("P1: " + to_string(score1));
-                ballInPlay = false; ballOwner = false;
+                ballInPlay = false; ballOwner = true;
                 serving = true; curveActive = false; curvePending = false;
-                p2.setPosition({courtLeft + 100.f, courtTopEdge});
-                serveText.setString(". to Serve (P2)");
-                serveText.setPosition({courtLeft + 80.f, courtTopEdge - 50.f});
+                if (score1 >= maxScore)
+                {
+                    gameOver = true;
+                    serveText.setString("");
+                }
+                else
+                {
+                    serveText.setString("X to Serve (P1)");
+                    serveText.setPosition({courtLeft + 80.f, courtBottomEdge + 20.f});
+                }
+                // Trigger score animations: P1 scored -> show P1 score animation and P2 sigh
+                scoreState = ScoreState::P1Scored;
+                scoreStateTimer = scoreStateDuration;
+                p1ScoreFrame = 0; p1ScoreFrameTimer = 0.f;
             }
             if (bpos.y > deadZoneBottom)
             {
                 score2++;
                 score2Text.setString("P2: " + to_string(score2));
-                ballInPlay = false; ballOwner = true;
+                ballInPlay = false; ballOwner = false;
                 serving = true; curveActive = false; curvePending = false;
-                p1.setPosition({courtLeft + 295.f, courtBottomEdge});
-                serveText.setString("X to Serve (P1)");
-                serveText.setPosition({courtLeft + 80.f, courtBottomEdge + 20.f});
+                if (score2 >= maxScore)
+                {
+                    gameOver = true;
+                    serveText.setString("");
+                }
+                else
+                {
+                    serveText.setString(". to Serve (P2)");
+                    serveText.setPosition({courtLeft + 80.f, courtTopEdge - 50.f});
+                }
+                // Trigger score animations: P2 scored -> show P2 score animation and P1 sigh
+                scoreState = ScoreState::P2Scored;
+                scoreStateTimer = scoreStateDuration;
             }
 
             sf::FloatRect ballB = ball.getGlobalBounds();
@@ -973,6 +1145,33 @@ float baseScale = min(targetW / tw, targetH / th);
                 p2AnimState      = P1Anim::Swing;
             }
         }
+        }
+
+        // Update score animation timers
+        if (scoreState != ScoreState::None)
+        {
+            scoreStateTimer -= dt;
+            if (scoreState == ScoreState::P1Scored)
+            {
+                p1ScoreFrameTimer += dt;
+                if (p1ScoreFrameTimer >= p1ScoreFrameDur)
+                {
+                    p1ScoreFrameTimer -= p1ScoreFrameDur;
+                    p1ScoreFrame = 1 - p1ScoreFrame;
+                }
+            }
+            if (scoreState == ScoreState::P2Scored)
+            {
+                p2ScoreFrameTimer += dt;
+                if (p2ScoreFrameTimer >= p2ScoreFrameDur)
+                {
+                    p2ScoreFrameTimer -= p2ScoreFrameDur;
+                    p2ScoreFrame = 1 - p2ScoreFrame;
+                }
+            }
+            if (scoreStateTimer <= 0.f)
+                scoreState = ScoreState::None;
+        }
 
         // ── DRAW ──────────────────────────────────────────────────────────────
         window.clear();
@@ -994,8 +1193,25 @@ float baseScale = min(targetW / tw, targetH / th);
         }
 
         // Draw P1 and P2 sprites instead of rectangles
-        window.draw(p1Sprite);
-        window.draw(p2Sprite);
+        // During a score animation we replace the base sprites with the
+        // appropriate score/sigh sprites so characters don't duplicate.
+        if (scoreState == ScoreState::P1Scored)
+        {
+            // P1: show score animation instead of base sprite
+            // P2: show sigh instead of base sprite
+            // do not draw p1Sprite or p2Sprite here
+        }
+        else if (scoreState == ScoreState::P2Scored)
+        {
+            // P2: show score animation instead of base sprite
+            // P1: show sigh instead of base sprite
+            // do not draw p1Sprite or p2Sprite here
+        }
+        else
+        {
+            window.draw(p1Sprite);
+            window.draw(p2Sprite);
+        }
 
        float spriteScale = 0.52f + heightRatio * 0.12f;
 
@@ -1044,19 +1260,43 @@ float baseScale = min(targetW / tw, targetH / th);
         if (ballInPlay)
             window.draw(ballSprite);
 
+        // Draw score/sigh animations if active
+        if (scoreState == ScoreState::P1Scored)
+        {
+            // draw P1 score (two-frame animation) and P2 sigh
+            if (p1ScoreFrame == 0) window.draw(p1ScoreSprite1);
+            else                   window.draw(p1ScoreSprite2);
+            window.draw(p2SighSprite);
+        }
+        else if (scoreState == ScoreState::P2Scored)
+        {
+            if (p2ScoreFrame == 0) window.draw(p2ScoreSprite);
+            else                    window.draw(p2ScoreSprite2);
+            window.draw(p1SighSprite);
+        }
+
+        window.draw(scorePanel);
         window.draw(score1Text);
         window.draw(score2Text);
         window.draw(serveText);
+        window.draw(restartText);
 
-        p1PosText.setString("P1 (" + to_string((int)p1.getPosition().x) + ", " +
-                            to_string((int)p1.getPosition().y) + ")");
-        p2PosText.setString("P2 (" + to_string((int)p2.getPosition().x) + ", " +
-                            to_string((int)p2.getPosition().y) + ")");
-        window.draw(p1PosText);
-        window.draw(p2PosText);
+        if (gameOver)
+        {
+            std::string winnerStr = (score1 >= maxScore) ? "P1 Wins!" : "P2 Wins!";
+            winText.setString(winnerStr);
+            winText.setPosition({bgW * 0.5f - 140.f, bgH * 0.45f});
+            window.draw(winText);
+
+            winPrompt.setString("Press R to return to menu");
+            winPrompt.setPosition({bgW * 0.5f - 180.f, bgH * 0.55f});
+            window.draw(winPrompt);
+        }
 
         window.display();
     }
+
+    } while (restartRequested);
 
     return 0;
 }
