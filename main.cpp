@@ -300,25 +300,31 @@ sf::CircleShape ball(6.f);
     if (!font.openFromFile("C:/Windows/Fonts/arial.ttf"))
         return 1;
 
-    sf::RectangleShape scorePanel({420.f, 72.f});
-    scorePanel.setFillColor(sf::Color(0, 0, 0, 170));
-    scorePanel.setOutlineThickness(2.f);
-    scorePanel.setOutlineColor(sf::Color::White);
-    scorePanel.setPosition({bgW / 2.f - 210.f, 14.f});
+    sf::RectangleShape p1ScoreBox({80.f, 80.f});
+    p1ScoreBox.setFillColor(sf::Color(0, 0, 0, 200));
+    p1ScoreBox.setOutlineThickness(3.f);
+    p1ScoreBox.setOutlineColor(sf::Color::White);
+    p1ScoreBox.setPosition({courtCenter - 40.f, courtBottomEdge + 16.f});
 
-    sf::Text score1Text(font, "P1: 0", 32);
+    sf::RectangleShape p2ScoreBox({80.f, 80.f});
+    p2ScoreBox.setFillColor(sf::Color(0, 0, 0, 200));
+    p2ScoreBox.setOutlineThickness(3.f);
+    p2ScoreBox.setOutlineColor(sf::Color::White);
+    p2ScoreBox.setPosition({courtCenter - 40.f, courtTopEdge - 96.f});
+
+    sf::Text score1Text(font, "0", 36);
     score1Text.setFillColor(sf::Color::White);
     score1Text.setStyle(sf::Text::Bold);
     score1Text.setOutlineColor(sf::Color::Black);
     score1Text.setOutlineThickness(2.f);
-    score1Text.setPosition({scorePanel.getPosition().x + 28.f, scorePanel.getPosition().y + 16.f});
+    score1Text.setPosition({p1ScoreBox.getPosition().x + 24.f, p1ScoreBox.getPosition().y + 10.f});
 
-    sf::Text score2Text(font, "P2: 0", 32);
+    sf::Text score2Text(font, "0", 36);
     score2Text.setFillColor(sf::Color::White);
     score2Text.setStyle(sf::Text::Bold);
     score2Text.setOutlineColor(sf::Color::Black);
     score2Text.setOutlineThickness(2.f);
-    score2Text.setPosition({scorePanel.getPosition().x + 262.f, scorePanel.getPosition().y + 16.f});
+    score2Text.setPosition({p2ScoreBox.getPosition().x + 24.f, p2ScoreBox.getPosition().y + 10.f});
 
     sf::Text serveText(font, "X to Serve (P1)", 22);
     serveText.setFillColor(sf::Color::Yellow);
@@ -1063,7 +1069,7 @@ float baseScale = min(targetW / tw, targetH / th);
             if (bpos.y < deadZoneTop)
             {
                 score1++;
-                score1Text.setString("P1: " + to_string(score1));
+                score1Text.setString(to_string(score1));
                 ballInPlay = false; ballOwner = true;
                 serving = true; curveActive = false; curvePending = false;
                 if (score1 >= maxScore)
@@ -1084,7 +1090,7 @@ float baseScale = min(targetW / tw, targetH / th);
             if (bpos.y > deadZoneBottom)
             {
                 score2++;
-                score2Text.setString("P2: " + to_string(score2));
+                score2Text.setString(to_string(score2));
                 ballInPlay = false; ballOwner = false;
                 serving = true; curveActive = false; curvePending = false;
                 if (score2 >= maxScore)
@@ -1275,7 +1281,8 @@ float baseScale = min(targetW / tw, targetH / th);
             window.draw(p1SighSprite);
         }
 
-        window.draw(scorePanel);
+        window.draw(p1ScoreBox);
+        window.draw(p2ScoreBox);
         window.draw(score1Text);
         window.draw(score2Text);
         window.draw(serveText);
